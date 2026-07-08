@@ -5,6 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-amber.svg)](LICENSE)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
 [![React Flow](https://img.shields.io/badge/React_Flow-12-blue)](https://reactflow.dev)
+[![CI](https://github.com/techdou/agnes-workbench/actions/workflows/ci.yml/badge.svg)](https://github.com/techdou/agnes-workbench/actions/workflows/ci.yml)
 
 通过拖拽节点、连线编排,一句话驱动 Agnes 的文本、图片、视频全模态生成能力。支持暗/亮双主题、本地永久缓存、工作流保存。
 
@@ -171,13 +172,38 @@ agnes-workbench/
 npm run build && npm start
 ```
 
-### 云服务器
+### Vercel(推荐,一键部署)
 
-1. 设置环境变量 `AGNES_API_KEY`
-2. 正常部署 Next.js(`next start` 或 Docker)
-3. `library/` 目录运行时自动创建
+支持完整 API route,免费额度够个人用:
+
+1. 打开 [vercel.com](https://vercel.com) → Import Git Repository → 选 `techdou/agnes-workbench`
+2. **Environment Variables** 里添加:
+   - `AGNES_API_KEY` = `你的真实 key`
+   - `AGNES_BASE_URL` = `https://apihub.agnes-ai.com`(可选,有默认值)
+3. Deploy,几分钟后拿到 `xxx.vercel.app` 域名
+
+> 仓库里已有 `vercel.json`,默认部署到香港节点(`hkg1`),国内访问较快。
+
+### 其他云服务器
+
+```bash
+# 设置环境变量后
+npm run build && npm start
+# library/ 目录运行时自动创建
+```
 
 > 无需 GPU —— 所有生成走 Agnes 云端 API。
+
+## 🔧 CI/CD
+
+GitHub Actions 在每次 push/PR 时自动运行:
+- 依赖安装(`npm ci`)
+- TypeScript 类型检查(`tsc --noEmit`)
+- 生产构建(`npm run build`)
+
+构建状态徽章在 README 顶部。失败会阻止合并,保证主干始终可构建。
+
+> CI 用占位符 key 构建,**真实 key 只在 Vercel 环境变量里**,不进代码仓库。
 
 ## ⚠️ 限制
 
