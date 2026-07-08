@@ -1,6 +1,18 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ============================================================
+# Agnes Workbench — .gitignore
+# 原则:敏感信息不入库、开发产物不入库、IDE 配置不入库
+# ============================================================
 
-# dependencies
+# ---------- 敏感信息(绝对不入库) ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+service-account*.json
+
+# ---------- 依赖 ----------
 /node_modules
 /.pnp
 .pnp.*
@@ -10,32 +22,43 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
-
-# next.js
+# ---------- 构建产物 ----------
 /.next/
 /out/
-
-# production
 /build
+/dist
+*.tsbuildinfo
+next-env.d.ts
 
-# misc
+# ---------- 本地数据(用户生成的作品库) ----------
+/library
+
+# ---------- 测试 ----------
+/coverage
+
+# ---------- IDE / 编辑器配置(个人开发环境,不入库) ----------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ---------- 操作系统文件 ----------
 .DS_Store
-*.pem
+Thumbs.db
+desktop.ini
+ehthumbs.db
 
-# debug
+# ---------- 日志 ----------
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
+logs/
 
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
+# ---------- 部署 ----------
 .vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
