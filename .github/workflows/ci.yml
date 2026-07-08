@@ -23,7 +23,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -42,8 +42,11 @@ jobs:
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: build-output
-          path: .next/
+          path: |
+            .next/
+            !.next/cache
+          if-no-files-found: ignore
           retention-days: 7
