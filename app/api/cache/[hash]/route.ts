@@ -1,10 +1,9 @@
-// 缓存代理:POST 提交外部 URL 下载到本地;GET 按 hash 取本地文件
+// 缓存代理:GET 按 hash 取本地文件
+// (POST 缓存提交已统一到 /api/cache/item,这里只负责读)
 import { NextRequest, NextResponse } from 'next/server';
-import { cacheExternalUrl, getEntryByHash } from '@/lib/cache';
+import { getEntryByHash, LIBRARY_DIR, assertSafeLocalPath } from '@/lib/cache';
 import fs from 'fs/promises';
 import path from 'path';
-
-const LIBRARY_DIR = path.join(process.cwd(), 'library');
 
 const MIME: Record<string, string> = {
   '.png': 'image/png',
@@ -17,33 +16,6 @@ const MIME: Record<string, string> = {
   '.mov': 'video/quicktime',
 };
 
-// POST /api/cache/[hash]?url=...&type=image|video
-// 把外部 URL 缓存到本地,返回同源访问路径
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ hash: string }> }
-) {
-  try {
-    const { hash: expectedHash } = await params;
-    const { searchParams } = new URL(req.url);
-    const url = searchParams.get('url');
-    const type = (searchParams.get('type') || 'image') as 'image' | 'video';
-    const prompt = searchParams.get('prompt') || undefined;
-
-    if (!url) return NextResponse.json({ error: 'url 必填' }, { status: 400 });
-
-    const result = await cacheExternalUrl(url, type, prompt);
-    return NextResponse.json({
-      hash: result.hash,
-      localUrl: `/api/cache/${result.hash}`,
-      created: result.created,
-    });
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: msg }, { status: 500 });
-  }
-}
-
 // GET /api/cache/[hash] —— 返回缓存的文件
 export async function GET(
   _req: NextRequest,
@@ -51,11 +23,23 @@ export async function GET(
 ) {
   try {
     const { hash } = await params;
+    // 防御:hash 只允许十六进制
+    if (!/^[0-9a-f]{1,32}$/.test(hash)) {
+      return NextResponse.json({ error: '非法 hash' }, { status: 400 });
+    }
     const entry = await getEntryByHash(hash);
     if (!entry) {
       return NextResponse.json({ error: `hash ${hash} 未找到` }, { status: 404 });
     }
+
+    // [S3] 路径遍历防护:校验 localPath 没越出 library 目录
+    assertSafeLocalPath(entry.localPath);
     const fullPath = path.join(LIBRARY_DIR, entry.localPath);
+    // 二次校验 resolve 之后
+    if (!fullPath.startsWith(LIBRARY_DIR + path.sep) && fullPath !== LIBRARY_DIR) {
+      return NextResponse.json({ error: '非法路径' }, { status: 400 });
+    }
+
     const buf = await fs.readFile(fullPath);
     const ext = path.extname(entry.localPath).toLowerCase();
     const mime = MIME[ext] || 'application/octet-stream';

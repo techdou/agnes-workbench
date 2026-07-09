@@ -1,5 +1,5 @@
-import { FlowCanvas } from '@/components/FlowCanvas';
+import { Dashboard } from '@/components/Dashboard';
 
 export default function Home() {
-  return <FlowCanvas />;
+  return <Dashboard />;
 }

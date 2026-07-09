@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
+// 画布主组件 —— React Flow + 工具栏 + 归档面板 + Command Palette + 批量操作
+import { useCallback, useEffect, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -9,16 +10,19 @@ import {
   BaseEdge,
   getBezierPath,
   type NodeTypes,
-  type Edge,
   type EdgeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { useFlowStore } from '@/lib/store';
+import { useSettings } from '@/lib/settings';
+import { useTranslation } from '@/lib/i18n';
 import { useToast } from '@/lib/useToast';
 import { Toolbar } from './Toolbar';
 import { LibraryPanel } from './LibraryPanel';
 import { ToastContainer } from './ToastContainer';
+import { CommandPalette } from './CommandPalette';
+import { SettingsModal } from './SettingsModal';
 
 import { TextNode } from './nodes/TextNode';
 import { TextToImageNode } from './nodes/TextToImageNode';
@@ -70,7 +74,6 @@ function DeletableEdge({
   return (
     <>
       <BaseEdge id={id} path={path} style={style} />
-      {/* [M18] 点击区放大到 28px(视觉按钮仍是 20px,居中) */}
       <foreignObject x={midX - 14} y={midY - 14} width={28} height={28} className="nodrag nopan">
         <button
           onClick={() => deleteEdge(id as string)}
@@ -94,35 +97,51 @@ function DeletableEdge({
 const edgeTypes = { default: DeletableEdge };
 
 export function FlowCanvas() {
+  const t = useTranslation();
   const nodes = useFlowStore((s) => s.nodes);
   const edges = useFlowStore((s) => s.edges);
   const onNodesChange = useFlowStore((s) => s.onNodesChange);
   const onEdgesChange = useFlowStore((s) => s.onEdgesChange);
   const onConnect = useFlowStore((s) => s.onConnect);
-  const deleteNode = useFlowStore((s) => s.deleteNode);
+  const deleteNodes = useFlowStore((s) => s.deleteNodes);
+  const duplicateNodes = useFlowStore((s) => s.duplicateNodes);
   const runNode = useFlowStore((s) => s.runNode);
-  const loadWorkflow = useFlowStore((s) => s.loadWorkflow);
+  const loadSettings = useSettings((s) => s.load);
   const pushToast = useToast((s) => s.push);
 
-  // 启动时尝试加载已保存的工作流
-  useEffect(() => {
-    if (useFlowStore.getState().hasSavedWorkflow()) {
-      loadWorkflow();
-    }
-  }, [loadWorkflow]);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // [H9] Delete 删除 + Ctrl/Cmd+Enter 运行选中节点
-  const onKeyUp = useCallback(
+  // 首次加载设置(i18n 需要 settings.language)
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
+
+  // 选中的节点(用于批量操作浮动条)
+  const selectedNodes = nodes.filter((n) => n.selected);
+  const selectedCount = selectedNodes.length;
+  const selectedIds = selectedNodes.map((n) => n.id);
+
+  // [H9] Delete 删除 + Ctrl/Cmd+Enter 运行选中节点 + / 唤起 Command Palette
+  const onKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      // 如果焦点在输入框/palette/settings 里,不拦截
       const tag = (e.target as HTMLElement)?.tagName;
       const inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+      // / 唤起 Command Palette(不在输入框时)
+      if (e.key === '/' && !inField && !paletteOpen) {
+        e.preventDefault();
+        setPaletteOpen(true);
+        return;
+      }
 
       // Ctrl/Cmd + Enter:运行选中节点
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         const selected = nodes.filter((n) => n.selected);
         if (selected.length > 0) {
           selected.forEach((n) => runNode(n.id));
-          pushToast(`开始运行 ${selected.length} 个节点`, 'info');
+          pushToast(t('toast.runningAll', { count: selected.length }), 'info');
         }
         return;
       }
@@ -131,22 +150,26 @@ export function FlowCanvas() {
       if ((e.key === 'Delete' || e.key === 'Backspace') && !inField) {
         const selected = nodes.filter((n) => n.selected);
         if (selected.length > 0) {
-          selected.forEach((n) => deleteNode(n.id));
-          pushToast(`已删除 ${selected.length} 个节点`, 'info');
+          if (selected.length >= 3 && !confirm(t('batch.deleteConfirm', { count: selected.length }))) return;
+          deleteNodes(selected.map((n) => n.id));
         }
       }
     },
-    [nodes, deleteNode, runNode, pushToast]
+    [nodes, deleteNodes, runNode, pushToast, t, paletteOpen]
   );
 
   useEffect(() => {
-    window.addEventListener('keyup', onKeyUp);
-    return () => window.removeEventListener('keyup', onKeyUp);
-  }, [onKeyUp]);
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onKeyDown]);
 
   return (
     <div className="relative flex h-[100dvh] w-screen flex-col overflow-hidden">
-      <Toolbar />
+      <Toolbar
+        onOpenPalette={() => setPaletteOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
+
       <div className="relative flex-1">
         <ReactFlow
           nodes={nodes}
@@ -164,10 +187,11 @@ export function FlowCanvas() {
           }}
           proOptions={{ hideAttribution: true }}
           deleteKeyCode={null}
+          multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
+          selectionOnDrag
         >
           <Background color="var(--c-grid)" gap={28} size={1} />
           <Controls showInteractive={false} className="!shadow-none" />
-          {/* [H6] MiniMap:用琥珀色 mask 提升暗色下可见度 */}
           <MiniMap
             pannable
             zoomable
@@ -179,14 +203,41 @@ export function FlowCanvas() {
             nodeBorderRadius={2}
           />
         </ReactFlow>
+
         <LibraryPanel />
         <ToastContainer />
+
+        {/* 批量操作浮动条:选中 >=1 节点时显示 */}
+        {selectedCount > 0 && (
+          <div
+            className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border px-4 py-2 shadow-xl backdrop-blur-md"
+            style={{
+              borderColor: 'var(--c-line)',
+              background: 'color-mix(in srgb, var(--c-ink) 95%, transparent)',
+              animation: 'fade-up 0.2s ease-out',
+            }}
+          >
+            <span className="font-mono text-[10px] tracking-wider" style={{ color: 'var(--c-phosphor)' }}>
+              {selectedCount} <span style={{ color: 'var(--c-text-faint)' }}>SELECTED</span>
+            </span>
+            <div className="mx-1 h-4 w-px" style={{ background: 'var(--c-line)' }} />
+            <BatchButton onClick={() => duplicateNodes(selectedIds)} icon="⧉" label={t('batch.duplicate')} />
+            <BatchButton
+              onClick={() => {
+                if (selectedCount >= 3 && !confirm(t('batch.deleteConfirm', { count: selectedCount }))) return;
+                deleteNodes(selectedIds);
+              }}
+              icon="✕"
+              label={t('batch.delete')}
+              danger
+            />
+          </div>
+        )}
 
         {/* 空状态 */}
         {nodes.length === 0 && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
             <div className="text-center" style={{ animation: 'fade-up 0.6s ease-out' }}>
-              {/* 装饰性发光环 + 中心符号 */}
               <div className="relative mx-auto mb-5 h-20 w-20">
                 <div
                   className="absolute inset-0 rounded-full border opacity-40"
@@ -204,18 +255,34 @@ export function FlowCanvas() {
                 </div>
               </div>
               <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold sm:text-2xl" style={{ color: 'var(--c-text-dim)' }}>
-                空白画布
+                {t('canvas.empty.title')}
               </h2>
               <p className="mt-2 font-mono text-[10px] tracking-[0.15em] sm:text-[11px]" style={{ color: 'var(--c-text-dim)' }}>
-                ADD NODES FROM THE TOP BAR
+                {t('canvas.empty.desc')}
               </p>
               <p className="mt-1 text-[11px] sm:text-[12px]" style={{ color: 'var(--c-text-faint)' }}>
-                连接节点,构建你的创作流水线
+                {t('canvas.empty.hint')}
               </p>
             </div>
           </div>
         )}
       </div>
+
+      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>
+  );
+}
+
+function BatchButton({ onClick, icon, label, danger }: { onClick: () => void; icon: string; label: string; danger?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[10px] tracking-wider transition-colors hover:bg-white/5"
+      style={{ color: danger ? 'var(--c-rust)' : 'var(--c-text-dim)' }}
+    >
+      <span>{icon}</span>
+      {label}
+    </button>
   );
 }

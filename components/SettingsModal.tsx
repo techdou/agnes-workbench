@@ -1,0 +1,308 @@
+'use client';
+
+// 设置弹窗 —— API / 生成参数 / 外观 / 语言 四个 tab
+// 毛玻璃背景 + 左侧 tab 栏,样式沿用 Phosphor 设计系统
+import { useState, useEffect } from 'react';
+import { useSettings, type Language, type Theme } from '@/lib/settings';
+import { useTranslation } from '@/lib/i18n';
+
+interface SettingsModalProps {
+  onClose: () => void;
+}
+
+type Tab = 'api' | 'generation' | 'appearance' | 'language';
+
+const TABS: { key: Tab; icon: string; labelKey: string }[] = [
+  { key: 'api', icon: '🔑', labelKey: 'settings.tab.api' },
+  { key: 'generation', icon: '⚙', labelKey: 'settings.tab.generation' },
+  { key: 'appearance', icon: '◐', labelKey: 'settings.tab.appearance' },
+  { key: 'language', icon: '言', labelKey: 'settings.tab.language' },
+];
+
+export function SettingsModal({ onClose }: SettingsModalProps) {
+  const t = useTranslation();
+  const { settings, update } = useSettings();
+  const [tab, setTab] = useState<Tab>('api');
+
+  // Esc 关闭
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      style={{ background: 'rgba(10,14,20,0.75)', backdropFilter: 'blur(12px)' }}
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-lg border shadow-2xl"
+        style={{ borderColor: 'var(--c-line)', background: 'var(--c-ink)', animation: 'fade-up 0.2s ease-out' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 左侧 tab 栏 */}
+        <nav
+          className="flex w-40 shrink-0 flex-col border-r py-4"
+          style={{ borderColor: 'var(--c-edge)', background: 'color-mix(in srgb, var(--c-void) 50%, transparent)' }}
+        >
+          <h2 className="mb-4 px-4 font-[family-name:var(--font-display)] text-[14px] font-semibold" style={{ color: 'var(--c-text)' }}>
+            {t('settings.title')}
+          </h2>
+          {TABS.map((tb) => (
+            <button
+              key={tb.key}
+              onClick={() => setTab(tb.key)}
+              className="flex items-center gap-2.5 border-l-2 px-4 py-2 text-left font-mono text-[11px] transition-colors"
+              style={{
+                borderColor: tab === tb.key ? 'var(--c-amber)' : 'transparent',
+                color: tab === tb.key ? 'var(--c-amber)' : 'var(--c-text-dim)',
+                background: tab === tb.key ? 'color-mix(in srgb, var(--c-amber) 8%, transparent)' : 'transparent',
+              }}
+            >
+              <span className="w-4 text-center text-[12px]">{tb.icon}</span>
+              {t(tb.labelKey)}
+            </button>
+          ))}
+        </nav>
+
+        {/* 右侧内容 */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {tab === 'api' && <ApiTab settings={settings} update={update} t={t} />}
+          {tab === 'generation' && <GenTab settings={settings} update={update} t={t} />}
+          {tab === 'appearance' && <AppearanceTab settings={settings} update={update} t={t} />}
+          {tab === 'language' && <LanguageTab settings={settings} update={update} t={t} />}
+        </div>
+
+        {/* 关闭按钮 */}
+        <button
+          onClick={onClose}
+          className="absolute right-4 top-4 rounded p-1 font-mono text-sm transition-colors hover:bg-white/5"
+          style={{ color: 'var(--c-text-faint)' }}
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- 通用控件 ----------
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-5">
+      <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-[0.15em]" style={{ color: 'var(--c-text-faint)' }}>
+        {label}
+      </label>
+      {children}
+      {hint && <p className="mt-1 font-mono text-[9px]" style={{ color: 'var(--c-text-ghost)' }}>{hint}</p>}
+    </div>
+  );
+}
+
+const inputClass = 'w-full rounded border px-3 py-2 font-mono text-[13px] transition-colors focus:outline-none';
+const inputStyle = { borderColor: 'var(--c-line)', background: 'var(--c-void)', color: 'var(--c-text)' };
+
+// ---------- Tab 内容 ----------
+
+type TabProps = {
+  settings: ReturnType<typeof useSettings.getState>['settings'];
+  update: ReturnType<typeof useSettings.getState>['update'];
+  t: ReturnType<typeof useTranslation>;
+};
+
+function ApiTab({ settings, update, t }: TabProps) {
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
+
+  async function testConnection() {
+    setTestStatus('testing');
+    try {
+      const resp = await fetch('/api/agnes/text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'test', maxTokens: 1 }),
+      });
+      // 只要不是网络错误就算连通(401 也说明地址通)
+      setTestStatus(resp.ok || resp.status === 401 ? 'ok' : 'fail');
+    } catch {
+      setTestStatus('fail');
+    }
+  }
+
+  return (
+    <div>
+      <Field label={t('settings.api.key')} hint={t('settings.api.keyHint')}>
+        <input
+          type="password"
+          value={settings.apiKey}
+          onChange={(e) => update({ apiKey: e.target.value })}
+          placeholder="sk-..."
+          className={inputClass}
+          style={inputStyle}
+        />
+      </Field>
+
+      <Field label={t('settings.api.baseUrl')}>
+        <input
+          type="text"
+          value={settings.baseUrl}
+          onChange={(e) => update({ baseUrl: e.target.value })}
+          placeholder="https://apihub.agnes-ai.com"
+          className={inputClass}
+          style={inputStyle}
+        />
+      </Field>
+
+      <button
+        onClick={testConnection}
+        disabled={testStatus === 'testing'}
+        className="rounded border px-4 py-2 font-mono text-[11px] tracking-wider transition-colors disabled:opacity-50"
+        style={{ borderColor: 'var(--c-phosphor)', color: 'var(--c-phosphor)' }}
+      >
+        {testStatus === 'testing' ? t('settings.api.testing') : t('settings.api.test')}
+      </button>
+      {testStatus === 'ok' && (
+        <span className="ml-3 font-mono text-[11px]" style={{ color: 'var(--c-phosphor)' }}>✓ {t('settings.api.testOk')}</span>
+      )}
+      {testStatus === 'fail' && (
+        <span className="ml-3 font-mono text-[11px]" style={{ color: 'var(--c-rust)' }}>✕ {t('settings.api.testFail')}</span>
+      )}
+    </div>
+  );
+}
+
+const SIZES = ['1024x768', '1024x1024', '768x1024', '1280x768', '720x1280'];
+const FRAME_OPTIONS = [81, 121, 161, 241, 441];
+const FPS_OPTIONS = [24, 30];
+
+function GenTab({ settings, update, t }: TabProps) {
+  return (
+    <div>
+      <Field label={t('settings.gen.defaultSize')}>
+        <select
+          value={settings.defaultImageSize}
+          onChange={(e) => update({ defaultImageSize: e.target.value })}
+          className={inputClass}
+          style={inputStyle}
+        >
+          {SIZES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </Field>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Field label={t('settings.gen.defaultFrames')}>
+          <select
+            value={settings.defaultVideoFrames}
+            onChange={(e) => update({ defaultVideoFrames: Number(e.target.value) })}
+            className={inputClass}
+            style={inputStyle}
+          >
+            {FRAME_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
+          </select>
+        </Field>
+
+        <Field label={t('settings.gen.defaultFps')}>
+          <select
+            value={settings.defaultVideoFps}
+            onChange={(e) => update({ defaultVideoFps: Number(e.target.value) })}
+            className={inputClass}
+            style={inputStyle}
+          >
+            {FPS_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
+          </select>
+        </Field>
+      </div>
+
+      <Field label={t('settings.gen.autoTranslate')}>
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            checked={settings.autoTranslate}
+            onChange={(e) => update({ autoTranslate: e.target.checked })}
+            style={{ accentColor: 'var(--c-amber)', width: '16px', height: '16px' }}
+          />
+          <span className="text-[13px]" style={{ color: 'var(--c-text-dim)' }}>
+            {settings.autoTranslate ? '✓' : '○'} ON
+          </span>
+        </label>
+      </Field>
+    </div>
+  );
+}
+
+function AppearanceTab({ settings, update, t }: TabProps) {
+  const themes: { key: Theme; labelKey: string; icon: string }[] = [
+    { key: 'dark', labelKey: 'settings.app.themeDark', icon: '◆' },
+    { key: 'light', labelKey: 'settings.app.themeLight', icon: '◇' },
+  ];
+
+  return (
+    <div>
+      <Field label={t('settings.app.theme')}>
+        <div className="flex gap-3">
+          {themes.map((th) => (
+            <button
+              key={th.key}
+              onClick={() => update({ theme: th.key })}
+              className="flex flex-1 items-center justify-center gap-2 rounded border py-3 font-mono text-[12px] transition-colors"
+              style={{
+                borderColor: settings.theme === th.key ? 'var(--c-amber)' : 'var(--c-line)',
+                color: settings.theme === th.key ? 'var(--c-amber)' : 'var(--c-text-dim)',
+                background: settings.theme === th.key ? 'color-mix(in srgb, var(--c-amber) 10%, transparent)' : 'var(--c-void)',
+              }}
+            >
+              <span>{th.icon}</span>
+              {t(th.labelKey)}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <Field label={t('settings.app.animations')}>
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            checked={settings.animations}
+            onChange={(e) => update({ animations: e.target.checked })}
+            style={{ accentColor: 'var(--c-amber)', width: '16px', height: '16px' }}
+          />
+          <span className="text-[13px]" style={{ color: 'var(--c-text-dim)' }}>
+            {settings.animations ? '✓' : '○'} ON
+          </span>
+        </label>
+      </Field>
+    </div>
+  );
+}
+
+function LanguageTab({ settings, update, t }: TabProps) {
+  const langs: { key: Language; labelKey: string }[] = [
+    { key: 'zh', labelKey: 'settings.lang.zh' },
+    { key: 'en', labelKey: 'settings.lang.en' },
+  ];
+
+  return (
+    <div>
+      <Field label={t('settings.tab.language')}>
+        <div className="flex gap-3">
+          {langs.map((lg) => (
+            <button
+              key={lg.key}
+              onClick={() => update({ language: lg.key })}
+              className="flex-1 rounded border py-3 font-[family-name:var(--font-display)] text-[14px] transition-colors"
+              style={{
+                borderColor: settings.language === lg.key ? 'var(--c-amber)' : 'var(--c-line)',
+                color: settings.language === lg.key ? 'var(--c-amber)' : 'var(--c-text-dim)',
+                background: settings.language === lg.key ? 'color-mix(in srgb, var(--c-amber) 10%, transparent)' : 'var(--c-void)',
+              }}
+            >
+              {t(lg.labelKey)}
+            </button>
+          ))}
+        </div>
+      </Field>
+    </div>
+  );
+}

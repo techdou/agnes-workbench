@@ -1,6 +1,7 @@
 'use client';
 
 import { useFlowStore } from '@/lib/store';
+import { useTranslation } from '@/lib/i18n';
 import { NodeShell, NodeTextarea, NodeLabel, ResultThumb, selectClass, selectStyle } from './NodeShell';
 import type { ImageToImageData } from '@/lib/types';
 
@@ -9,11 +10,12 @@ const SIZES = ['1024x768', '1024x1024', '768x1024'];
 export function ImageToImageNode({ id, data }: { id: string; data: ImageToImageData }) {
   const update = useFlowStore((s) => s.updateNodeData);
   const run = useFlowStore((s) => s.runNode);
+  const t = useTranslation();
 
   return (
     <NodeShell
       id={id}
-      title="图生图"
+      title={t('node.imageToImage')}
       sigil="ℜ"
       accent="phosphor"
       status={data.status}
@@ -26,16 +28,16 @@ export function ImageToImageNode({ id, data }: { id: string; data: ImageToImageD
         className="rounded border border-dashed px-2 py-1.5 text-center font-mono text-[10px]"
         style={{ borderColor: 'var(--c-line)', color: 'var(--c-text-ghost)' }}
       >
-        ← 连接上游图片
+        {t('node.upstreamHint.image')}
       </div>
-      <NodeLabel>编辑指令 · instruction</NodeLabel>
+      <NodeLabel>{t('node.prompt')}</NodeLabel>
       <NodeTextarea
         value={data.prompt || ''}
         onChange={(v) => update(id, { prompt: v })}
-        placeholder="把背景改成雨夜赛博朋克…"
+        placeholder={t('node.promptPlaceholder.text')}
         rows={3}
       />
-      <NodeLabel>尺寸</NodeLabel>
+      <NodeLabel>{t('node.size')}</NodeLabel>
       <select
         value={data.size || '1024x768'}
         onChange={(e) => update(id, { size: e.target.value })}

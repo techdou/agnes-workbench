@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from '@/lib/i18n';
 
 interface Entry {
   hash: string;
@@ -11,10 +12,11 @@ interface Entry {
 }
 
 export function LibraryPanel() {
+  const t = useTranslation();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null); // [H8] 错误状态
+  const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -25,14 +27,18 @@ export function LibraryPanel() {
       const data = await resp.json();
       setEntries(data.entries || []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '加载失败');
+      setError(e instanceof Error ? e.message : t('archive.loadFailed'));
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    if (open) refresh();
+    if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      refresh();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const imgCount = entries.filter((e) => e.type === 'image').length;
@@ -40,10 +46,9 @@ export function LibraryPanel() {
 
   return (
     <>
-      {/* [M17] ARCHIVE 按钮:定位避开工具栏(用 top-[104px] 给两行工具栏留空间) */}
       <button
         onClick={() => setOpen(!open)}
-        className="fixed right-0 top-[104px] z-20 flex items-center gap-1.5 rounded-l-md border border-r-0 border-l-[3px] px-3 py-2 font-mono text-[10px] font-semibold tracking-[0.15em] shadow-lg backdrop-blur-md transition-all hover:pl-4"
+        className="fixed right-0 top-[52px] z-20 flex items-center gap-1.5 rounded-l-md border border-r-0 border-l-[3px] px-3 py-2 font-mono text-[10px] font-semibold tracking-[0.15em] shadow-lg backdrop-blur-md transition-all hover:pl-4"
         style={{
           borderColor: 'var(--c-edge)',
           borderLeftColor: 'var(--c-amber)',
@@ -52,7 +57,7 @@ export function LibraryPanel() {
         }}
       >
         <span className="flicker">◈</span>
-        <span className="hidden sm:inline">ARCHIVE</span>
+        <span className="hidden sm:inline">{t('toolbar.archive').toUpperCase()}</span>
         <span className="rounded px-1.5 py-0.5" style={{ background: 'var(--c-void)', color: 'var(--c-text-dim)' }}>
           {entries.length}
         </span>
@@ -60,13 +65,13 @@ export function LibraryPanel() {
 
       {open && (
         <aside
-          className="fixed bottom-0 right-0 top-36 z-20 flex w-72 flex-col border-l backdrop-blur-md sm:w-80"
+          className="fixed bottom-0 right-0 top-[84px] z-20 flex w-72 flex-col border-l backdrop-blur-md sm:w-80"
           style={{ borderColor: 'var(--c-edge)', background: 'color-mix(in srgb, var(--c-void) 98%, transparent)' }}
         >
           <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'var(--c-edge)' }}>
             <div>
               <h2 className="font-[family-name:var(--font-display)] text-[14px] font-semibold" style={{ color: 'var(--c-text)' }}>
-                作品归档
+                {t('archive.title')}
               </h2>
               <p className="mt-0.5 font-mono text-[9px] tracking-[0.15em]" style={{ color: 'var(--c-text-faint)' }}>
                 {imgCount} IMG · {vidCount} VID
@@ -83,12 +88,11 @@ export function LibraryPanel() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-3">
-            {/* [H8] 错误状态 */}
             {error && (
               <div className="mb-3 rounded border-l-2 px-3 py-2" style={{ borderColor: 'var(--c-rust)', background: 'color-mix(in srgb, var(--c-rust) 10%, transparent)' }}>
-                <p className="font-mono text-[10px]" style={{ color: 'var(--c-rust)' }}>加载失败: {error}</p>
+                <p className="font-mono text-[10px]" style={{ color: 'var(--c-rust)' }}>{t('archive.loadFailed')}: {error}</p>
                 <button onClick={refresh} className="mt-1 font-mono text-[9px] underline" style={{ color: 'var(--c-rust)' }}>
-                  重试
+                  {t('archive.retry')}
                 </button>
               </div>
             )}
@@ -97,10 +101,10 @@ export function LibraryPanel() {
               <div className="mt-16 text-center">
                 <div className="font-mono text-2xl opacity-30">∅</div>
                 <p className="mt-2 font-mono text-[10px] tracking-wider" style={{ color: 'var(--c-text-ghost)' }}>
-                  ARCHIVE EMPTY
+                  {t('archive.empty')}
                 </p>
                 <p className="mt-1 text-[11px]" style={{ color: 'var(--c-text-faint)' }}>
-                  生成作品后会自动归档
+                  {t('archive.emptyDesc')}
                 </p>
               </div>
             )}
@@ -120,15 +124,13 @@ export function LibraryPanel() {
                         <img src={`/api/cache/${e.hash}`} alt={e.prompt || ''} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
                       ) : (
                         <>
-                          {/* [M13] 视频用 poster 属性显示首帧,失败则显示播放图标占位 */}
                           <video
                             src={`/api/cache/${e.hash}`}
-                            poster={`/api/cache/${e.hash}`}
                             className="h-full w-full object-cover"
                             muted
-                            preload="metadata"
+                            preload="none"
                           />
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/40">
                             <span className="font-mono text-lg text-white opacity-80">▶</span>
                           </div>
                         </>
@@ -145,7 +147,7 @@ export function LibraryPanel() {
                     </div>
                     <div className="px-1.5 py-1.5">
                       <p className="line-clamp-2 font-[family-name:var(--font-display)] text-[10px] leading-tight" style={{ color: 'var(--c-text-dim)' }}>
-                        {e.prompt || '(无 prompt)'}
+                        {e.prompt || t('archive.noPrompt')}
                       </p>
                       <p className="mt-1 font-mono text-[8px] tracking-wider" style={{ color: 'var(--c-text-ghost)' }}>
                         {new Date(e.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}

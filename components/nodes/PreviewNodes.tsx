@@ -2,10 +2,13 @@
 
 // 图片/视频预览节点(双主题适配)
 import { useFlowStore } from '@/lib/store';
+import { useTranslation } from '@/lib/i18n';
 import { NodeShell } from './NodeShell';
 import type { ImagePreviewData, VideoPreviewData } from '@/lib/types';
 
-function DownloadButton({ url, filename }: { url: string; filename: string }) {
+type TFunc = (key: string, params?: Record<string, string | number>) => string;
+
+function DownloadButton({ url, filename, t }: { url: string; filename: string; t: TFunc }) {
   return (
     <a
       href={url}
@@ -17,19 +20,19 @@ function DownloadButton({ url, filename }: { url: string; filename: string }) {
         color: 'var(--c-phosphor)',
       }}
     >
-      ↓ DOWNLOAD
+      ↓ {t('node.download')}
     </a>
   );
 }
 
-function EmptyState() {
+function EmptyState({ t }: { t: (key: string, params?: Record<string, string | number>) => string }) {
   return (
     <div
       className="flex h-32 items-center justify-center rounded border border-dashed"
       style={{ borderColor: 'var(--c-line)' }}
     >
       <span className="font-mono text-[10px] tracking-wider" style={{ color: 'var(--c-text-ghost)' }}>
-        AWAITING INPUT
+        {t('node.awaitingInput')}
       </span>
     </div>
   );
@@ -37,10 +40,11 @@ function EmptyState() {
 
 export function ImagePreviewNode({ id, data }: { id: string; data: ImagePreviewData }) {
   const run = useFlowStore((s) => s.runNode);
+  const t = useTranslation();
   return (
     <NodeShell
       id={id}
-      title="图片预览"
+      title={t('node.imagePreview')}
       sigil="▣"
       accent="phosphor"
       status={data.status}
@@ -48,7 +52,7 @@ export function ImagePreviewNode({ id, data }: { id: string; data: ImagePreviewD
       hasTarget
       hasSource
       onRun={() => run(id)}
-      runLabel="SYNC FROM UPSTREAM"
+      runLabel="SYNC"
     >
       {data.cachedUrl ? (
         <div style={{ animation: 'fade-up 0.4s ease-out' }}>
@@ -61,10 +65,10 @@ export function ImagePreviewNode({ id, data }: { id: string; data: ImagePreviewD
           >
             <img src={data.cachedUrl} alt="preview" className="max-h-64 w-full object-contain" />
           </div>
-          <DownloadButton url={data.cachedUrl} filename={`agnes-${id}.png`} />
+          <DownloadButton url={data.cachedUrl} filename={`agnes-${id}.png`} t={t} />
         </div>
       ) : (
-        <EmptyState />
+        <EmptyState t={t} />
       )}
     </NodeShell>
   );
@@ -72,10 +76,11 @@ export function ImagePreviewNode({ id, data }: { id: string; data: ImagePreviewD
 
 export function VideoPreviewNode({ id, data }: { id: string; data: VideoPreviewData }) {
   const run = useFlowStore((s) => s.runNode);
+  const t = useTranslation();
   return (
     <NodeShell
       id={id}
-      title="视频预览"
+      title={t('node.videoPreview')}
       sigil="▶"
       accent="amber"
       status={data.status}
@@ -83,7 +88,7 @@ export function VideoPreviewNode({ id, data }: { id: string; data: VideoPreviewD
       hasTarget
       hasSource={false}
       onRun={() => run(id)}
-      runLabel="SYNC FROM UPSTREAM"
+      runLabel="SYNC"
     >
       {data.cachedUrl ? (
         <div style={{ animation: 'fade-up 0.4s ease-out' }}>
@@ -96,10 +101,10 @@ export function VideoPreviewNode({ id, data }: { id: string; data: VideoPreviewD
           >
             <video src={data.cachedUrl} controls autoPlay loop className="max-h-64 w-full" />
           </div>
-          <DownloadButton url={data.cachedUrl} filename={`agnes-${id}.mp4`} />
+          <DownloadButton url={data.cachedUrl} filename={`agnes-${id}.mp4`} t={t} />
         </div>
       ) : (
-        <EmptyState />
+        <EmptyState t={t} />
       )}
     </NodeShell>
   );

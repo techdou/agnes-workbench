@@ -6,6 +6,7 @@ import { NodeToolbar } from '@xyflow/react';
 import type { ReactNode } from 'react';
 import type { NodeStatus } from '@/lib/types';
 import { useFlowStore } from '@/lib/store';
+import { useTranslation } from '@/lib/i18n';
 
 interface NodeShellProps {
   id: string;
@@ -28,11 +29,18 @@ const ACCENT = {
   fog: { dot: 'var(--c-text-dim)', glow: 'rgba(139,149,167,0.3)', bar: 'var(--c-text-faint)' },
 };
 
-const STATUS: Record<NodeStatus, { label: string; dot: string }> = {
-  idle: { label: 'READY', dot: 'var(--c-text-faint)' },
-  running: { label: 'RUNNING', dot: 'var(--c-amber)' },
-  done: { label: 'DONE', dot: 'var(--c-phosphor)' },
-  error: { label: 'ERROR', dot: 'var(--c-rust)' },
+const STATUS_DOT: Record<NodeStatus, string> = {
+  idle: 'var(--c-text-faint)',
+  running: 'var(--c-amber)',
+  done: 'var(--c-phosphor)',
+  error: 'var(--c-rust)',
+};
+
+const STATUS_LABEL_KEY: Record<NodeStatus, string> = {
+  idle: 'node.status.idle',
+  running: 'node.status.running',
+  done: 'node.status.done',
+  error: 'node.status.error',
 };
 
 export function NodeShell({
@@ -49,8 +57,10 @@ export function NodeShell({
   children,
 }: NodeShellProps) {
   const deleteNode = useFlowStore((s) => s.deleteNode);
+  const t = useTranslation();
   const ac = ACCENT[accent];
-  const st = STATUS[status];
+  const statusDot = STATUS_DOT[status];
+  const statusLabel = t(STATUS_LABEL_KEY[status]);
 
   return (
     <div
@@ -76,7 +86,7 @@ export function NodeShell({
             color: 'var(--c-rust)',
           }}
         >
-          ✕ 删除
+          ✕ {t('common.delete')}
         </button>
       </NodeToolbar>
 
@@ -94,13 +104,13 @@ export function NodeShell({
           <span
             className="inline-block h-1.5 w-1.5 rounded-full"
             style={{
-              backgroundColor: st.dot,
-              boxShadow: `0 0 6px ${st.dot}`,
+              backgroundColor: statusDot,
+              boxShadow: `0 0 6px ${statusDot}`,
               animation: status === 'running' ? 'flicker 1.2s ease-in-out infinite' : undefined,
             }}
           />
           <span className="font-mono text-[9px] tracking-[0.15em]" style={{ color: 'var(--c-text-faint)' }}>
-            {st.label}
+            {statusLabel}
           </span>
         </div>
       </div>
@@ -137,7 +147,7 @@ export function NodeShell({
               {status === 'running' ? (
                 <span className="inline-flex items-center gap-1.5">
                   <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: 'var(--c-amber)' }} />
-                  PROCESSING…
+                  {t('node.processing')}
                 </span>
               ) : (
                 <>▶ {runLabel}</>

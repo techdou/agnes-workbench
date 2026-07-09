@@ -40,7 +40,9 @@ export interface ImageToImageData extends BaseNodeData {
   cachedUrl?: string;
 }
 
-export interface TextToVideoData extends BaseNodeData {
+// [L1] 四个视频类节点(textToVideo/imageToVideo/multiImageVideo/keyframe)
+// data 字段完全相同,合并为一个 interface
+export interface VideoNodeData extends BaseNodeData {
   prompt: string;
   width?: number;
   height?: number;
@@ -52,41 +54,11 @@ export interface TextToVideoData extends BaseNodeData {
   videoId?: string;
 }
 
-export interface ImageToVideoData extends BaseNodeData {
-  prompt: string;
-  width?: number;
-  height?: number;
-  numFrames: number;
-  frameRate: number;
-  resultUrl?: string;
-  cachedUrl?: string;
-  progress?: number;
-  videoId?: string;
-}
-
-export interface MultiImageVideoData extends BaseNodeData {
-  prompt: string;
-  width?: number;
-  height?: number;
-  numFrames: number;
-  frameRate: number;
-  resultUrl?: string;
-  cachedUrl?: string;
-  progress?: number;
-  videoId?: string;
-}
-
-export interface KeyframeData extends BaseNodeData {
-  prompt: string;
-  width?: number;
-  height?: number;
-  numFrames: number;
-  frameRate: number;
-  resultUrl?: string;
-  cachedUrl?: string;
-  progress?: number;
-  videoId?: string;
-}
+// 向后兼容的别名(外部 import 可能用旧名)
+export type TextToVideoData = VideoNodeData;
+export type ImageToVideoData = VideoNodeData;
+export type MultiImageVideoData = VideoNodeData;
+export type KeyframeData = VideoNodeData;
 
 export interface ImagePreviewData extends BaseNodeData {
   imageUrl?: string; // 来自上游或直接填

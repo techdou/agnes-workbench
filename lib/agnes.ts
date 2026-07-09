@@ -1,6 +1,16 @@
 // Agnes API 客户端 —— 从 agnes_api.py 移植
 // 支持:文本生成、文生图、图生图、文生视频、图生视频、多图视频、关键帧动画
 // 中文 prompt 自动翻译为英文
+//
+// ── Agnes API 返回结构参考(OpenAI 兼容) ──
+// 文本 POST /v1/chat/completions:
+//   { choices: [{ message: { content: string } }] }
+// 图像 POST /v1/images/generations:
+//   { url: string } | { image_url: string } | { data: [{ url | image_url }] }
+// 视频 POST /v1/videos:
+//   { video_id: string } | { task_id: string } | { id: string, status: string }
+// 视频 GET /v1/videos/{id} 或 /agnesapi?video_id=&model_name=:
+//   { status, progress?, video_url | url } (status: queued|in_progress|completed|failed)
 
 const BASE_URL = process.env.AGNES_BASE_URL || 'https://apihub.agnes-ai.com';
 const TEXT_MODEL = 'agnes-2.0-flash';
@@ -9,13 +19,22 @@ const VIDEO_MODEL = 'agnes-video-v2.0';
 
 function getApiKey(): string {
   const key = process.env.AGNES_API_KEY;
-  if (!key) throw new Error('AGNES_API_KEY 未配置,请检查 .env.local');
+  if (!key) throw new Error('AGNES_API_KEY 未配置,请检查环境变量(本地为 .env.local,部署时在 Vercel 环境变量里设置)');
   return key;
+}
+
+// ---------- 类型定义(替代 any) ----------
+
+// Agnes API 返回的 JSON 结构(宽松类型,因为字段名不固定)
+type AgnesJson = Record<string, unknown>;
+
+interface ChatCompletionResponse {
+  choices?: { message: { content: string } }[];
 }
 
 // ---------- 基础请求 ----------
 
-async function requestJson<T = any>(
+async function requestJson<T = AgnesJson>(
   method: string,
   path: string,
   payload?: Record<string, unknown>,
@@ -55,9 +74,7 @@ function needsTranslation(prompt: string): boolean {
 
 export async function translatePromptToEnglish(prompt: string): Promise<string> {
   if (!needsTranslation(prompt)) return prompt;
-  const data = await requestJson<{
-    choices: { message: { content: string } }[];
-  }>('POST', '/v1/chat/completions', {
+  const data = await requestJson<ChatCompletionResponse>('POST', '/v1/chat/completions', {
     model: TEXT_MODEL,
     messages: [
       {
@@ -91,9 +108,7 @@ export async function generateText(
   const messages: { role: string; content: string }[] = [];
   if (opts?.system) messages.push({ role: 'system', content: opts.system });
   messages.push({ role: 'user', content: prompt });
-  const data = await requestJson<{
-    choices: { message: { content: string } }[];
-  }>('POST', '/v1/chat/completions', {
+  const data = await requestJson<ChatCompletionResponse>('POST', '/v1/chat/completions', {
     model: TEXT_MODEL,
     messages,
     temperature: opts?.temperature ?? 0.7,
@@ -112,15 +127,17 @@ export interface ImageResult {
   raw: unknown;
 }
 
-function extractImageUrls(data: any): string[] {
+// 从 Agnes 返回结构里提取图片 URL(字段名可能是 url / image_url / data[].url)
+function extractImageUrls(data: AgnesJson): string[] {
   const urls: string[] = [];
   if (typeof data?.url === 'string') urls.push(data.url);
   if (typeof data?.image_url === 'string') urls.push(data.image_url);
   if (Array.isArray(data?.data)) {
     for (const item of data.data) {
       if (item && typeof item === 'object') {
+        const obj = item as Record<string, unknown>;
         for (const key of ['url', 'image_url']) {
-          if (typeof item[key] === 'string') urls.push(item[key]);
+          if (typeof obj[key] === 'string') urls.push(obj[key] as string);
         }
       }
     }
@@ -131,7 +148,7 @@ function extractImageUrls(data: any): string[] {
 // 文生图
 export async function textToImage(prompt: string, size = '1024x768'): Promise<ImageResult> {
   const englishPrompt = await translatePromptToEnglish(prompt);
-  const data = await requestJson('POST', '/v1/images/generations', {
+  const data = await requestJson<AgnesJson>('POST', '/v1/images/generations', {
     model: IMAGE_MODEL,
     prompt: englishPrompt,
     size,
@@ -147,7 +164,7 @@ export async function imageToImage(
   size = '1024x768'
 ): Promise<ImageResult> {
   const englishPrompt = await translatePromptToEnglish(prompt);
-  const data = await requestJson('POST', '/v1/images/generations', {
+  const data = await requestJson<AgnesJson>('POST', '/v1/images/generations', {
     model: IMAGE_MODEL,
     prompt: englishPrompt,
     size,
@@ -192,13 +209,14 @@ function validateVideoArgs(opts: {
   }
 }
 
-function pickVideoId(data: any): { id?: string; kind: 'video_id' | 'task_id' } {
+// 从创建响应里提取任务标识(字段名可能是 video_id / task_id / id)
+function pickVideoId(data: AgnesJson): { id?: string; kind: 'video_id' | 'task_id' } {
   if (typeof data?.video_id === 'string' && data.video_id) {
     return { id: data.video_id, kind: 'video_id' };
   }
   for (const key of ['task_id', 'id']) {
     if (typeof data?.[key] === 'string' && data[key]) {
-      return { id: data[key], kind: 'task_id' };
+      return { id: data[key] as string, kind: 'task_id' };
     }
   }
   return { kind: 'task_id' };
@@ -213,17 +231,23 @@ export interface VideoOptions {
   negativePrompt?: string;
 }
 
-// 文生视频:创建任务
-export async function createTextToVideo(
+// ---------- [L2] 视频创建公共逻辑(三个 create* 合并) ----------
+// 差异只在 payload 构造,后面的翻译+请求+解析完全一样
+
+/**
+ * 内部:构造 payload → 发请求 → 解析 id,三个 create* 共用
+ * buildPayload 负责把 prompt + 模式相关的额外字段塞进 payload
+ */
+async function createVideoTask(
   prompt: string,
-  opts: VideoOptions = {}
+  opts: VideoOptions,
+  buildPayload: (englishPrompt: string) => Record<string, unknown>
 ): Promise<VideoCreateResult> {
   validateVideoArgs(opts);
   const englishPrompt = await translatePromptToEnglish(prompt);
-  const payload: Record<string, unknown> = {
-    model: VIDEO_MODEL,
-    prompt: englishPrompt,
-  };
+
+  const payload = buildPayload(englishPrompt);
+  // 通用可选参数
   for (const [k, v] of Object.entries({
     width: opts.width,
     height: opts.height,
@@ -234,87 +258,57 @@ export async function createTextToVideo(
   })) {
     if (v != null) payload[k] = v;
   }
-  const data = await requestJson<any>('POST', '/v1/videos', payload);
+
+  const data = await requestJson<AgnesJson>('POST', '/v1/videos', payload);
   const { id, kind } = pickVideoId(data);
   return {
     videoId: kind === 'video_id' ? id : undefined,
     taskId: kind === 'task_id' ? id : undefined,
     id,
-    status: data?.status ?? 'queued',
+    status: typeof data?.status === 'string' ? data.status : 'queued',
     raw: data,
   };
 }
 
+// 文生视频:创建任务
+export function createTextToVideo(
+  prompt: string,
+  opts: VideoOptions = {}
+): Promise<VideoCreateResult> {
+  return createVideoTask(prompt, opts, (englishPrompt) => ({
+    model: VIDEO_MODEL,
+    prompt: englishPrompt,
+  }));
+}
+
 // 图生视频:创建任务(单张参考图)
-export async function createImageToVideo(
+export function createImageToVideo(
   prompt: string,
   imageUrl: string,
   opts: VideoOptions = {}
 ): Promise<VideoCreateResult> {
-  validateVideoArgs(opts);
-  const englishPrompt = await translatePromptToEnglish(prompt);
-  const payload: Record<string, unknown> = {
+  return createVideoTask(prompt, opts, (englishPrompt) => ({
     model: VIDEO_MODEL,
     prompt: englishPrompt,
     image: imageUrl,
-  };
-  for (const [k, v] of Object.entries({
-    width: opts.width,
-    height: opts.height,
-    num_frames: opts.numFrames,
-    frame_rate: opts.frameRate,
-    seed: opts.seed,
-    negative_prompt: opts.negativePrompt,
-  })) {
-    if (v != null) payload[k] = v;
-  }
-  const data = await requestJson<any>('POST', '/v1/videos', payload);
-  const { id, kind } = pickVideoId(data);
-  return {
-    videoId: kind === 'video_id' ? id : undefined,
-    taskId: kind === 'task_id' ? id : undefined,
-    id,
-    status: data?.status ?? 'queued',
-    raw: data,
-  };
+  }));
 }
 
 // 多图视频 / 关键帧动画:创建任务
-export async function createMultiImageVideo(
+export function createMultiImageVideo(
   prompt: string,
   imageUrls: string[],
   mode: 'keyframes' | 'ti2vid',
   opts: VideoOptions = {}
 ): Promise<VideoCreateResult> {
-  validateVideoArgs(opts);
-  const englishPrompt = await translatePromptToEnglish(prompt);
-  const payload: Record<string, unknown> = {
+  return createVideoTask(prompt, opts, (englishPrompt) => ({
     model: VIDEO_MODEL,
     prompt: englishPrompt,
     extra_body: {
       image: imageUrls,
       mode,
     },
-  };
-  for (const [k, v] of Object.entries({
-    width: opts.width,
-    height: opts.height,
-    num_frames: opts.numFrames,
-    frame_rate: opts.frameRate,
-    seed: opts.seed,
-    negative_prompt: opts.negativePrompt,
-  })) {
-    if (v != null) payload[k] = v;
-  }
-  const data = await requestJson<any>('POST', '/v1/videos', payload);
-  const { id, kind } = pickVideoId(data);
-  return {
-    videoId: kind === 'video_id' ? id : undefined,
-    taskId: kind === 'task_id' ? id : undefined,
-    id,
-    status: data?.status ?? 'queued',
-    raw: data,
-  };
+  }));
 }
 
 // ---------- 视频状态查询 ----------
@@ -327,7 +321,7 @@ export interface VideoStatusResult {
   raw: unknown;
 }
 
-function extractVideoUrl(data: any): string | undefined {
+function extractVideoUrl(data: AgnesJson): string | undefined {
   for (const key of ['video_url', 'url', 'remixed_from_video_id']) {
     const v = data?.[key];
     if (typeof v === 'string' && /^https?:\/\//.test(v)) return v;
@@ -335,7 +329,7 @@ function extractVideoUrl(data: any): string | undefined {
   if (Array.isArray(data?.data)) {
     for (const item of data.data) {
       if (item && typeof item === 'object') {
-        const u = extractVideoUrl(item);
+        const u = extractVideoUrl(item as AgnesJson);
         if (u) return u;
       }
     }
@@ -351,7 +345,7 @@ export async function getVideoStatus(identifier: string): Promise<VideoStatusRes
   } else {
     path = `/v1/videos/${encodeURIComponent(identifier)}`;
   }
-  const data = await requestJson<any>('GET', path);
+  const data = await requestJson<AgnesJson>('GET', path);
   return {
     status: String(data?.status ?? ''),
     progress: typeof data?.progress === 'number' ? data.progress : undefined,

@@ -1,17 +1,19 @@
 'use client';
 
 import { useFlowStore } from '@/lib/store';
+import { useTranslation } from '@/lib/i18n';
 import { NodeShell, NodeTextarea, NodeLabel } from './NodeShell';
 import type { TextNodeData } from '@/lib/types';
 
 export function TextNode({ id, data }: { id: string; data: TextNodeData }) {
   const update = useFlowStore((s) => s.updateNodeData);
   const run = useFlowStore((s) => s.runNode);
+  const t = useTranslation();
 
   return (
     <NodeShell
       id={id}
-      title="文本"
+      title={t('node.text')}
       sigil="Τ"
       accent="fog"
       status={data.status}
@@ -19,11 +21,11 @@ export function TextNode({ id, data }: { id: string; data: TextNodeData }) {
       onRun={() => run(id)}
       runLabel={data.enhance ? 'AUGMENT' : 'COMMIT'}
     >
-      <NodeLabel>提示词 · prompt</NodeLabel>
+      <NodeLabel>{t('node.prompt')}</NodeLabel>
       <NodeTextarea
         value={data.text || ''}
         onChange={(v) => update(id, { text: v })}
-        placeholder="描述你想要的画面…"
+        placeholder={t('node.promptPlaceholder.text')}
         rows={4}
       />
       <label
@@ -36,7 +38,7 @@ export function TextNode({ id, data }: { id: string; data: TextNodeData }) {
           onChange={(e) => update(id, { enhance: e.target.checked })}
           style={{ accentColor: 'var(--c-amber)' }}
         />
-        AUGMENT · LLM 扩写
+        {t('node.augment')}
       </label>
     </NodeShell>
   );
