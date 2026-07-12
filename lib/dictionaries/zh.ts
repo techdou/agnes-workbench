@@ -70,6 +70,7 @@ const zh = {
   'node.promptPlaceholder.text': '描述你想要的画面…',
   'node.upstreamHint.text': '← 可连接文本节点作为提示词',
   'node.upstreamHint.image': '← 连接上游图片',
+  'node.upstreamHint.imageMulti': '← 可连接多张参考图(融合)',
   'node.upstreamHint.multiImage': '← 连接多张图片',
   'node.upstreamHint.keyframe': '← 连接 2 张图片(首帧 + 末帧)',
   'node.size': '尺寸',
@@ -87,6 +88,11 @@ const zh = {
   'palette.placeholder': '搜索节点类型…',
   'palette.empty': '未找到匹配的节点',
   'palette.hint': '/ 唤起 · Enter 添加 · Esc 关闭',
+
+  // Node Creator(拖连线到空白处弹出)
+  'creator.placeholder': '搜索节点…',
+  'creator.empty': '无可用节点',
+  'creator.title': '添加节点',
 
   // 批量操作
   'batch.selected': '{count} 个节点已选中',
@@ -149,7 +155,7 @@ const zh = {
 
   // 错误
   'error.missingPrompt': '缺少提示词(请填写或连接文本节点)',
-  'error.imageToImageNoInput': '图生图需要上游连接一张图片',
+  'error.imageToImageNoInput': '图生图需要至少连接一张参考图',
   'error.imageToVideoNoInput': '图生视频需要上游连接一张图片',
   'error.multiImageNoInput': '需要上游连接图片(至少一张)',
   'error.noImageUrl': '未返回图片 URL',

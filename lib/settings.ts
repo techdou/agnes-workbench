@@ -84,9 +84,10 @@ export const useSettings = create<SettingsState>((set, get) => ({
       currentLanguage = patch.language;
       notifyLanguageChange();
     }
-    // 主题变更同步到 DOM
+    // 主题变更同步到 DOM + localStorage(给首屏内联脚本快速读取,避免 FOUC)
     if (patch.theme && typeof document !== 'undefined') {
       document.documentElement.setAttribute('data-theme', patch.theme);
+      try { localStorage.setItem('phosphor-theme', patch.theme); } catch { /* ignore */ }
     }
     // 持久化(防抖不必要,设置变更频率低)
     if (get().loaded) {
@@ -104,6 +105,8 @@ export const useSettings = create<SettingsState>((set, get) => ({
         notifyLanguageChange();
         if (typeof document !== 'undefined') {
           document.documentElement.setAttribute('data-theme', merged.theme);
+          // 同步写 localStorage,给下次首屏的内联脚本快速读取
+          try { localStorage.setItem('phosphor-theme', merged.theme); } catch { /* ignore */ }
         }
         return;
       }

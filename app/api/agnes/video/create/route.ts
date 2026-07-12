@@ -4,13 +4,15 @@ import {
   createTextToVideo,
   createImageToVideo,
   createMultiImageVideo,
+  setApiKeyOverride,
 } from '@/lib/agnes';
 
 export async function POST(req: NextRequest) {
   try {
+    setApiKeyOverride(req.headers.get('X-Agnes-Key'));
     const body = await req.json();
     const {
-      mode, // 'text' | 'image' | 'multi' | 'keyframe'
+      mode,
       prompt,
       imageUrl,
       imageUrls,
@@ -38,8 +40,6 @@ export async function POST(req: NextRequest) {
       if (!Array.isArray(imageUrls) || imageUrls.length === 0) {
         return NextResponse.json({ error: '多图/关键帧需要 imageUrls 数组' }, { status: 400 });
       }
-      // 注意:Agnes 的 ti2vid 模式最多只支持 1 张图
-      // 多图场景(>=2 张)必须用 keyframes 模式
       const useKeyframes = mode === 'keyframe' || imageUrls.length >= 2;
       result = await createMultiImageVideo(
         prompt,

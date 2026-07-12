@@ -17,9 +17,18 @@ const TEXT_MODEL = 'agnes-2.0-flash';
 const IMAGE_MODEL = 'agnes-image-2.1-flash';
 const VIDEO_MODEL = 'agnes-video-v2.0';
 
+// 允许 API route 注入本次请求的 key(来自客户端 X-Agnes-Key 请求头)
+// 优先级:request key > process.env.AGNES_API_KEY
+let requestApiKey: string | null = null;
+
+/** 注入客户端通过 X-Agnes-Key 请求头传来的 key(优先于 env) */
+export function setApiKeyOverride(key?: string | null) {
+  requestApiKey = key || null;
+}
+
 function getApiKey(): string {
-  const key = process.env.AGNES_API_KEY;
-  if (!key) throw new Error('AGNES_API_KEY 未配置,请检查环境变量(本地为 .env.local,部署时在 Vercel 环境变量里设置)');
+  const key = requestApiKey || process.env.AGNES_API_KEY;
+  if (!key) throw new Error('AGNES_API_KEY 未配置,请在设置面板填写或检查环境变量');
   return key;
 }
 
@@ -157,10 +166,10 @@ export async function textToImage(prompt: string, size = '1024x768'): Promise<Im
   return { urls: extractImageUrls(data), raw: data };
 }
 
-// 图生图 / 图片编辑
+// 图生图 / 图片编辑 —— 支持多图参考(实测 agnes-image-2.1-flash 会融合多张参考图)
 export async function imageToImage(
   prompt: string,
-  inputImageUrl: string,
+  inputImageUrls: string[],
   size = '1024x768'
 ): Promise<ImageResult> {
   const englishPrompt = await translatePromptToEnglish(prompt);
@@ -169,7 +178,7 @@ export async function imageToImage(
     prompt: englishPrompt,
     size,
     extra_body: {
-      image: [inputImageUrl],
+      image: inputImageUrls,
       response_format: 'url',
     },
   });

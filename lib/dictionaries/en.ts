@@ -70,6 +70,7 @@ const en = {
   'node.promptPlaceholder.text': 'Describe the scene you want…',
   'node.upstreamHint.text': '← Connect a text node as prompt',
   'node.upstreamHint.image': '← Connect an upstream image',
+  'node.upstreamHint.imageMulti': '← Connect multiple reference images (fusion)',
   'node.upstreamHint.multiImage': '← Connect multiple images',
   'node.upstreamHint.keyframe': '← Connect 2 images (first + last frame)',
   'node.size': 'Size',
@@ -87,6 +88,11 @@ const en = {
   'palette.placeholder': 'Search node types…',
   'palette.empty': 'No matching nodes',
   'palette.hint': '/ to open · Enter to add · Esc to close',
+
+  // Node Creator (drag connection to empty area)
+  'creator.placeholder': 'Search nodes…',
+  'creator.empty': 'No available nodes',
+  'creator.title': 'Add Node',
 
   // Batch operations
   'batch.selected': '{count} nodes selected',
@@ -149,7 +155,7 @@ const en = {
 
   // Errors
   'error.missingPrompt': 'Missing prompt (fill in or connect a text node)',
-  'error.imageToImageNoInput': 'Image-to-image needs an upstream image',
+  'error.imageToImageNoInput': 'Image-to-image needs at least one reference image',
   'error.imageToVideoNoInput': 'Image-to-video needs an upstream image',
   'error.multiImageNoInput': 'Needs upstream images (at least one)',
   'error.noImageUrl': 'No image URL returned',

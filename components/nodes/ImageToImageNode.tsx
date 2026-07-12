@@ -28,7 +28,7 @@ export function ImageToImageNode({ id, data }: { id: string; data: ImageToImageD
         className="rounded border border-dashed px-2 py-1.5 text-center font-mono text-[10px]"
         style={{ borderColor: 'var(--c-line)', color: 'var(--c-text-ghost)' }}
       >
-        {t('node.upstreamHint.image')}
+        ← {t('node.upstreamHint.imageMulti')}
       </div>
       <NodeLabel>{t('node.prompt')}</NodeLabel>
       <NodeTextarea

@@ -28,16 +28,24 @@ import { useSettings } from './settings';
 
 // ---------- API 调用封装 ----------
 
+// 统一构建请求头:注入 settings 里的 API Key(可选覆盖 .env)
+function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const apiKey = useSettings.getState().settings.apiKey;
+  if (apiKey) headers['X-Agnes-Key'] = apiKey;
+  return headers;
+}
+
 async function callImage(
   mode: 'text-to-image' | 'image-to-image',
   prompt: string,
   size: string,
-  inputImageUrl?: string
+  inputImageUrls?: string[]
 ): Promise<{ urls: string[] }> {
   const resp = await fetch('/api/agnes/image', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode, prompt, size, inputImageUrl }),
+    headers: authHeaders(),
+    body: JSON.stringify({ mode, prompt, size, inputImageUrls }),
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
@@ -49,7 +57,7 @@ async function callImage(
 async function callText(prompt: string, system?: string): Promise<string> {
   const resp = await fetch('/api/agnes/text', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify({ prompt, system, temperature: 0.7 }),
   });
   if (!resp.ok) {
@@ -64,7 +72,7 @@ async function callText(prompt: string, system?: string): Promise<string> {
 async function callVideoCreate(body: Record<string, unknown>): Promise<{ videoId?: string; id?: string; status: string }> {
   const resp = await fetch('/api/agnes/video/create', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify(body),
   });
   if (!resp.ok) {
@@ -75,7 +83,9 @@ async function callVideoCreate(body: Record<string, unknown>): Promise<{ videoId
 }
 
 async function callVideoStatus(id: string): Promise<{ status: string; progress?: number; url?: string; error?: string }> {
-  const resp = await fetch(`/api/agnes/video/status?id=${encodeURIComponent(id)}`);
+  const resp = await fetch(`/api/agnes/video/status?id=${encodeURIComponent(id)}`, {
+    headers: authHeaders(),
+  });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     throw new Error(err.error || `HTTP ${resp.status}`);
@@ -130,6 +140,33 @@ const ALLOWED_CONNECTIONS: Record<string, Set<string>> = {
   videoPreview: new Set(['textToVideo', 'imageToVideo', 'multiImageVideo', 'keyframe']),
 };
 
+// ---------- 节点推荐(从 ALLOWED_CONNECTIONS 反推)----------
+// 给定一个 source 节点类型,返回它可以合法连接到的 target 类型列表
+// 用于"拖连线到空白处松开 → 弹出推荐节点"交互
+const RECOMMENDED_TARGETS: Record<string, string[]> = (() => {
+  const map: Record<string, string[]> = {};
+  // 遍历所有 target 类型,看它们的 allowed set 里有没有这个 source
+  for (const [targetType, allowedSources] of Object.entries(ALLOWED_CONNECTIONS)) {
+    for (const sourceType of allowedSources) {
+      if (!map[sourceType]) map[sourceType] = [];
+      // 去重
+      if (!map[sourceType].includes(targetType)) map[sourceType].push(targetType);
+    }
+  }
+  return map;
+})();
+
+/**
+ * 获取某个节点类型可以连接到的推荐目标类型列表
+ * 如果没有限制(text 节点谁都能连),返回所有可作为 target 的类型
+ */
+export function getRecommendedTargets(sourceType: string): string[] {
+  const targets = RECOMMENDED_TARGETS[sourceType];
+  if (targets && targets.length > 0) return targets;
+  // 没有匹配的(如 text 本身没有 outgoing 限制),返回空——由调用方 fallback 到全部
+  return [];
+}
+
 function isValidConnection(connection: Connection | Edge): boolean {
   // 取 source 和 target 的节点类型
   const nodes = useFlowStore.getState().nodes;
@@ -168,6 +205,8 @@ interface FlowState {
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
   addNode: (type: string, data?: Record<string, unknown>) => void;
+  addNodeAt: (type: string, position: { x: number; y: number }, data?: Record<string, unknown>) => string;
+  addNodeConnected: (type: string, position: { x: number; y: number }, sourceId: string, sourceHandle?: string) => string;
   updateNodeData: (id: string, patch: Record<string, unknown>) => void;
   runNode: (id: string) => Promise<void>;
   runAll: () => Promise<void>;
@@ -219,6 +258,32 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     const node: Node = { id, type, position: newPos(idx), data: { status: 'idle', ...data } };
     set({ nodes: [...get().nodes, node] });
     scheduleAutoSave();
+  },
+
+  // 在指定坐标创建节点(给 NodeCreator / Command Palette 用),返回新节点 id
+  addNodeAt: (type, position, data = {}) => {
+    const id = genId(type);
+    const node: Node = { id, type, position, data: { status: 'idle', ...data } };
+    set({ nodes: [...get().nodes, node] });
+    scheduleAutoSave();
+    return id;
+  },
+
+  // 创建节点并自动从 source 连线(给"拖连线到空白松开"用),返回新节点 id
+  addNodeConnected: (type, position, sourceId, sourceHandle = 'out') => {
+    const id = genId(type);
+    const node: Node = { id, type, position, data: { status: 'idle' } };
+    const edge: Edge = {
+      id: genId('edge'),
+      source: sourceId,
+      target: id,
+      sourceHandle,
+      targetHandle: 'in',
+      animated: true,
+    };
+    set({ nodes: [...get().nodes, node], edges: [...get().edges, edge] });
+    scheduleAutoSave();
+    return id;
   },
 
   updateNodeData: (id, patch) => {
@@ -383,14 +448,17 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   persistCurrentProject: async () => {
     const { currentProjectId, currentProjectName, nodes, edges } = get();
     if (!currentProjectId) return;
-    // 先读现有项目(保留 createdAt/thumbnail),再更新
+    // 先读现有项目(保留 createdAt),再更新
     const existing = await getProject(currentProjectId);
+    // 缩略图:取画布里第一张生成结果的 cachedUrl(图片优先,视频次之)
+    // 不用 html-to-image 那种重依赖,用内容本身的缩略图更直观
+    const thumbnail = pickThumbnail(nodes);
     const project: Project = {
       id: currentProjectId,
       name: currentProjectName,
       nodes,
       edges,
-      thumbnail: existing?.thumbnail,
+      thumbnail: thumbnail || existing?.thumbnail,
       createdAt: existing?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -456,11 +524,14 @@ async function executeNode(id: string): Promise<void> {
       if (!prompt) throw new Error(t('error.missingPrompt'));
 
       const mode = nodeType === 'imageToImage' ? 'image-to-image' : 'text-to-image';
-      const inputImage = nodeType === 'imageToImage' ? upstream.images[0] : undefined;
-      if (nodeType === 'imageToImage' && !inputImage) throw new Error(t('error.imageToImageNoInput'));
+      // 图生图:传全部上游图片作为参考(支持多图融合)
+      const inputImages = nodeType === 'imageToImage' ? upstream.images : undefined;
+      if (inputImages && inputImages.length === 0) {
+        throw new Error(t('error.imageToImageNoInput'));
+      }
 
       const size = d.size || settings.defaultImageSize;
-      const result = await callImage(mode, prompt, size, inputImage);
+      const result = await callImage(mode, prompt, size, inputImages);
       if (cancelled) return;
       const url = result.urls[0];
       if (!url) throw new Error(t('error.noImageUrl'));
@@ -551,6 +622,27 @@ async function executeNode(id: string): Promise<void> {
 }
 
 // ---------- 辅助函数 ----------
+
+// 从画布节点里挑一个缩略图 URL(图片优先,视频次之,用于 Dashboard 卡片)
+function pickThumbnail(nodes: Node[]): string | undefined {
+  // 优先:图片类节点的 cachedUrl
+  const imageTypes = new Set(['textToImage', 'imageToImage', 'imagePreview']);
+  for (const n of nodes) {
+    if (imageTypes.has(n.type || '')) {
+      const d = n.data as { cachedUrl?: string };
+      if (d.cachedUrl) return d.cachedUrl;
+    }
+  }
+  // 次选:视频类节点的 cachedUrl
+  const videoTypes = new Set(['textToVideo', 'imageToVideo', 'multiImageVideo', 'keyframe', 'videoPreview']);
+  for (const n of nodes) {
+    if (videoTypes.has(n.type || '')) {
+      const d = n.data as { cachedUrl?: string };
+      if (d.cachedUrl) return d.cachedUrl;
+    }
+  }
+  return undefined;
+}
 
 // 取消某节点的运行
 function cancelRun(id: string) {

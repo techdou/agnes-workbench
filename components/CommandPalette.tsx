@@ -6,33 +6,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useFlowStore } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
-import type { NodeType } from '@/lib/types';
-
-interface PaletteItem {
-  type: NodeType;
-  group: 'input' | 'image' | 'video' | 'output';
-  sigil: string;
-}
-
-const ITEMS: PaletteItem[] = [
-  { type: 'text', group: 'input', sigil: 'Τ' },
-  { type: 'textToImage', group: 'image', sigil: 'ℑ' },
-  { type: 'imageToImage', group: 'image', sigil: 'ℜ' },
-  { type: 'textToVideo', group: 'video', sigil: 'Ϝ' },
-  { type: 'imageToVideo', group: 'video', sigil: 'δ' },
-  { type: 'multiImageVideo', group: 'video', sigil: 'Σ' },
-  { type: 'keyframe', group: 'video', sigil: 'Φ' },
-  { type: 'imagePreview', group: 'output', sigil: '▣' },
-  { type: 'videoPreview', group: 'output', sigil: '▶' },
-];
-
-const GROUP_ORDER: PaletteItem['group'][] = ['input', 'image', 'video', 'output'];
-const GROUP_LABEL_KEY: Record<PaletteItem['group'], string> = {
-  input: 'nodeGroup.input',
-  image: 'nodeGroup.image',
-  video: 'nodeGroup.video',
-  output: 'nodeGroup.output',
-};
+import { NODE_METADATA, NODE_GROUP_ORDER, NODE_GROUP_LABEL_KEY } from '@/lib/node-metadata';
 
 interface CommandPaletteProps {
   onClose: () => void;
@@ -51,23 +25,20 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
 
   // 过滤:匹配节点类型名(中英文)或 sigil
   const filtered = useMemo(() => {
-    if (!query.trim()) return ITEMS;
+    if (!query.trim()) return NODE_METADATA;
     const q = query.toLowerCase();
-    return ITEMS.filter((item) => {
-      const nodeName = t(`node.${item.type}`).toLowerCase();
+    return NODE_METADATA.filter((item) => {
+      const nodeName = t(item.labelKey).toLowerCase();
       return nodeName.includes(q) || item.type.toLowerCase().includes(q) || item.sigil === query;
     });
   }, [query, t]);
 
-  // 输入变化时重置选中项(不用 effect,直接在 onChange 里处理)
   const onQueryChange = (v: string) => {
     setQuery(v);
     setActiveIdx(0);
   };
 
-  const flatFiltered = filtered; // 扁平化索引用
-
-  function add(type: NodeType) {
+  function add(type: string) {
     addNode(type);
     onClose();
   }
@@ -76,18 +47,17 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
     if (e.key === 'Escape') { onClose(); return; }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActiveIdx((i) => Math.min(i + 1, flatFiltered.length - 1));
+      setActiveIdx((i) => Math.min(i + 1, filtered.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setActiveIdx((i) => Math.max(i - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      const item = flatFiltered[activeIdx];
+      const item = filtered[activeIdx];
       if (item) add(item.type);
     }
   }
 
-  // 按 group 分组渲染,但保持 flatFiltered 的全局索引
   let runningIdx = -1;
 
   return (
@@ -123,20 +93,20 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
 
         {/* 结果列表 */}
         <div className="max-h-[50vh] overflow-y-auto p-2">
-          {flatFiltered.length === 0 ? (
+          {filtered.length === 0 ? (
             <div className="py-8 text-center">
               <span className="font-mono text-[11px]" style={{ color: 'var(--c-text-ghost)' }}>
                 {t('palette.empty')}
               </span>
             </div>
           ) : (
-            GROUP_ORDER.map((group) => {
-              const groupItems = flatFiltered.filter((i) => i.group === group);
+            NODE_GROUP_ORDER.map((group) => {
+              const groupItems = filtered.filter((i) => i.group === group);
               if (groupItems.length === 0) return null;
               return (
                 <div key={group} className="mb-1">
                   <div className="px-2 py-1 font-mono text-[8px] tracking-[0.2em]" style={{ color: 'var(--c-text-faint)' }}>
-                    {t(GROUP_LABEL_KEY[group])}
+                    {t(NODE_GROUP_LABEL_KEY[group])}
                   </div>
                   {groupItems.map((item) => {
                     runningIdx++;
@@ -163,7 +133,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
                           className="font-[family-name:var(--font-display)] text-[13px]"
                           style={{ color: isActive ? 'var(--c-text)' : 'var(--c-text-dim)' }}
                         >
-                          {t(`node.${item.type}`)}
+                          {t(item.labelKey)}
                         </span>
                       </button>
                     );

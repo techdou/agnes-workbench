@@ -1,20 +1,23 @@
 'use client';
 
 // 画布主组件 —— React Flow + 工具栏 + 归档面板 + Command Palette + 批量操作
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   Controls,
   MiniMap,
   BaseEdge,
   getBezierPath,
+  useReactFlow,
   type NodeTypes,
   type EdgeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { useFlowStore } from '@/lib/store';
+import { NODE_ACCENT } from '@/lib/node-metadata';
 import { useSettings } from '@/lib/settings';
 import { useTranslation } from '@/lib/i18n';
 import { useToast } from '@/lib/useToast';
@@ -22,6 +25,7 @@ import { Toolbar } from './Toolbar';
 import { LibraryPanel } from './LibraryPanel';
 import { ToastContainer } from './ToastContainer';
 import { CommandPalette } from './CommandPalette';
+import { NodeCreator } from './NodeCreator';
 import { SettingsModal } from './SettingsModal';
 
 import { TextNode } from './nodes/TextNode';
@@ -45,16 +49,12 @@ const nodeTypes: NodeTypes = {
   videoPreview: VideoPreviewNode,
 };
 
-const NODE_COLOR: Record<string, string> = {
-  text: 'var(--c-text-dim)',
-  textToImage: 'var(--c-phosphor)',
-  imageToImage: 'var(--c-phosphor)',
-  textToVideo: 'var(--c-amber)',
-  imageToVideo: 'var(--c-amber)',
-  multiImageVideo: 'var(--c-amber)',
-  keyframe: 'var(--c-amber)',
-  imagePreview: 'var(--c-phosphor)',
-  videoPreview: 'var(--c-amber)',
+// MiniMap 节点颜色映射(从统一元数据生成)
+const ACCENT_COLOR: Record<string, string> = {
+  amber: 'var(--c-amber)',
+  phosphor: 'var(--c-phosphor)',
+  fog: 'var(--c-text-dim)',
+  rust: 'var(--c-rust)',
 };
 
 // 自定义 edge:中间显示一个 ✕ 按钮,点击删除连线
@@ -97,7 +97,16 @@ function DeletableEdge({
 const edgeTypes = { default: DeletableEdge };
 
 export function FlowCanvas() {
+  return (
+    <ReactFlowProvider>
+      <FlowCanvasInner />
+    </ReactFlowProvider>
+  );
+}
+
+function FlowCanvasInner() {
   const t = useTranslation();
+  const { screenToFlowPosition } = useReactFlow();
   const nodes = useFlowStore((s) => s.nodes);
   const edges = useFlowStore((s) => s.edges);
   const onNodesChange = useFlowStore((s) => s.onNodesChange);
@@ -111,6 +120,17 @@ export function FlowCanvas() {
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // NodeCreator 状态:拖连线到空白处松开时弹出
+  const [creator, setCreator] = useState<{
+    sourceType: string;
+    sourceId: string;
+    screenPos: { x: number; y: number };  // 弹窗定位(屏幕坐标)
+    flowPos: { x: number; y: number };    // 新节点位置(画布坐标)
+  } | null>(null);
+
+  // 跟踪正在拖的连线起点(onConnectStart 记录,onConnectEnd 判断是否连到空白)
+  const connectingSource = useRef<{ nodeId: string; handleType: string } | null>(null);
 
   // 首次加载设置(i18n 需要 settings.language)
   useEffect(() => {
@@ -163,6 +183,45 @@ export function FlowCanvas() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onKeyDown]);
 
+  // ---------- NodeCreator:拖连线到空白处弹出推荐节点 ----------
+  const onConnectStart = useCallback((_: MouseEvent | TouchEvent, params: { nodeId: string | null; handleType: string | null }) => {
+    if (params.nodeId && params.handleType === 'source') {
+      connectingSource.current = { nodeId: params.nodeId, handleType: params.handleType };
+    }
+  }, []);
+
+  const onConnectEnd = useCallback(
+    (event: MouseEvent | TouchEvent) => {
+      // 没有正在拖的连线起点,跳过
+      const src = connectingSource.current;
+      connectingSource.current = null;
+      if (!src) return;
+
+      // 检查松开位置是否在某个节点 handle 上(如果是,说明正常连线了,不弹 creator)
+      const clientX = 'touches' in event ? event.changedTouches[0].clientX : event.clientX;
+      const clientY = 'touches' in event ? event.changedTouches[0].clientY : event.clientY;
+      const target = document.elementFromPoint(clientX, clientY);
+      // 如果松在 handle 上或节点内部,让 React Flow 正常处理
+      if (target?.closest('.react-flow__handle') || target?.closest('.react-flow__node')) return;
+
+      // 找到 source 节点类型
+      const sourceNode = useFlowStore.getState().nodes.find((n) => n.id === src.nodeId);
+      if (!sourceNode?.type) return;
+
+      // 鼠标屏幕坐标 → 画布坐标(给新建节点定位)
+      const flowPos = screenToFlowPosition({ x: clientX, y: clientY });
+
+      setCreator({
+        sourceType: sourceNode.type,
+        sourceId: src.nodeId,
+        // NodeCreator 弹窗用屏幕坐标定位,新建节点用画布坐标
+        screenPos: { x: clientX, y: clientY },
+        flowPos,
+      });
+    },
+    [screenToFlowPosition]
+  );
+
   return (
     <div className="relative flex h-[100dvh] w-screen flex-col overflow-hidden">
       <Toolbar
@@ -179,6 +238,8 @@ export function FlowCanvas() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onConnectStart={onConnectStart}
+          onConnectEnd={onConnectEnd}
           fitView
           defaultEdgeOptions={{
             type: 'default',
@@ -197,7 +258,7 @@ export function FlowCanvas() {
             zoomable
             className="!bg-transparent"
             maskColor="color-mix(in srgb, var(--c-void) 55%, transparent)"
-            nodeColor={(n) => NODE_COLOR[n.type || ''] || 'var(--c-text-ghost)'}
+            nodeColor={(n) => ACCENT_COLOR[NODE_ACCENT[n.type || '']] || 'var(--c-text-ghost)'}
             nodeStrokeColor="var(--c-text)"
             nodeStrokeWidth={2}
             nodeBorderRadius={2}
@@ -270,6 +331,15 @@ export function FlowCanvas() {
 
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {creator && (
+        <NodeCreator
+          sourceType={creator.sourceType}
+          sourceId={creator.sourceId}
+          screenPos={creator.screenPos}
+          flowPos={creator.flowPos}
+          onClose={() => setCreator(null)}
+        />
+      )}
     </div>
   );
 }

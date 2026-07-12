@@ -1,9 +1,11 @@
 // 文本生成代理
 import { NextRequest, NextResponse } from 'next/server';
-import { generateText } from '@/lib/agnes';
+import { generateText, setApiKeyOverride } from '@/lib/agnes';
 
 export async function POST(req: NextRequest) {
   try {
+    // 优先用客户端 X-Agnes-Key 请求头(设置面板配置),否则回退 env
+    setApiKeyOverride(req.headers.get('X-Agnes-Key'));
     const body = await req.json();
     const { prompt, system, temperature, maxTokens } = body;
     if (!prompt) return NextResponse.json({ error: 'prompt 必填' }, { status: 400 });

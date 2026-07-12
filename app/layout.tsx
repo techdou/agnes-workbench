@@ -23,13 +23,33 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
+// 首屏防闪烁:在 React 渲染前同步从 localStorage 读主题,设到 <html data-theme>
+// settings store 异步从 IndexedDB 加载会晚一帧,这里用 localStorage 的同步快照兜底
+const themeBootstrap = `
+(function(){
+  try {
+    var t = localStorage.getItem('phosphor-theme');
+    if (t === 'light' || t === 'dark') {
+      document.documentElement.setAttribute('data-theme', t);
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  } catch(e) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+})();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" className={`${fraunces.variable} ${jetbrainsMono.variable} h-full`}>
+    <html lang="zh-CN" className={`${fraunces.variable} ${jetbrainsMono.variable} h-full`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
+      </head>
       <body className="min-h-full overflow-hidden">{children}</body>
     </html>
   );

@@ -131,6 +131,7 @@ body::before {
   stroke-dasharray: 4 3;
 }
 
+/* 连线 handle:source(输出,右)暖色强发光;target(输入,左)冷色弱发光 + 箭头内凹 */
 .react-flow__handle {
   width: 10px !important;
   height: 10px !important;
@@ -141,9 +142,18 @@ body::before {
 }
 .react-flow__handle:hover {
   transform: scale(1.3);
+  box-shadow: 0 0 14px var(--edge-glow);
 }
+/* source(右侧输出):琥珀色,圆形,强发光 —— 表示"数据从这里流出" */
+.react-flow__handle.source {
+  background: var(--handle-source) !important;
+  box-shadow: 0 0 8px var(--edge-glow), inset 0 0 0 1px rgba(255,255,255,0.2);
+}
+/* target(左侧输入):磷光绿,带内凹效果 —— 表示"数据流入这里" */
 .react-flow__handle.target {
   background: var(--handle-target) !important;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--handle-target) 40%, transparent), inset 0 0 0 2px var(--c-void);
+  border-radius: 3px !important; /* target 用圆角方形,和 source 的圆形区分 */
 }
 
 .react-flow__controls {
