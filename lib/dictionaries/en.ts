@@ -44,6 +44,7 @@ const en = {
 
   // Node types
   'node.text': 'Text',
+  'node.imageInput': 'Upload Image',
   'node.textToImage': 'Text to Image',
   'node.imageToImage': 'Image to Image',
   'node.textToVideo': 'Text to Video',
@@ -80,6 +81,10 @@ const en = {
   'node.augment': 'LLM Augment',
   'node.download': 'DOWNLOAD',
   'node.awaitingInput': 'AWAITING INPUT',
+  'node.uploadImage': 'Upload Image',
+  'node.uploaded': 'UPLOADED',
+  'node.dragOrClick': 'Drag image here or click to select',
+  'node.clickToReplace': 'Click to replace image',
   'node.videoPromptPlaceholder': 'Motion instructions…',
   'node.emptyText': 'Text node is empty',
   'node.runSelected': 'Run selected nodes',

@@ -44,6 +44,7 @@ const zh = {
 
   // 节点类型名
   'node.text': '文本',
+  'node.imageInput': '上传图片',
   'node.textToImage': '文生图',
   'node.imageToImage': '图生图',
   'node.textToVideo': '文生视频',
@@ -80,6 +81,10 @@ const zh = {
   'node.augment': 'LLM 扩写',
   'node.download': '下载',
   'node.awaitingInput': '等待输入',
+  'node.uploadImage': '上传图片',
+  'node.uploaded': '已上传',
+  'node.dragOrClick': '拖拽图片到这里 或 点击选择',
+  'node.clickToReplace': '点击替换图片',
   'node.videoPromptPlaceholder': '动画指令…',
   'node.emptyText': '文本节点内容为空',
   'node.runSelected': '运行选中节点',

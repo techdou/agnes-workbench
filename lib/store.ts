@@ -131,12 +131,12 @@ function newPos(idx: number) {
 const ALLOWED_CONNECTIONS: Record<string, Set<string>> = {
   // 文本类节点:谁都能连进来当 prompt(但通常连 text)
   textToImage: new Set(['text']),
-  imageToImage: new Set(['text', 'textToImage', 'imagePreview', 'imageToImage']),
+  imageToImage: new Set(['text', 'textToImage', 'imagePreview', 'imageToImage', 'imageInput']),
   textToVideo: new Set(['text']),
-  imageToVideo: new Set(['text', 'textToImage', 'imageToImage', 'imagePreview']),
-  multiImageVideo: new Set(['text', 'textToImage', 'imageToImage', 'imagePreview']),
-  keyframe: new Set(['text', 'textToImage', 'imageToImage', 'imagePreview']),
-  imagePreview: new Set(['textToImage', 'imageToImage', 'imagePreview']),
+  imageToVideo: new Set(['text', 'textToImage', 'imageToImage', 'imagePreview', 'imageInput']),
+  multiImageVideo: new Set(['text', 'textToImage', 'imageToImage', 'imagePreview', 'imageInput']),
+  keyframe: new Set(['text', 'textToImage', 'imageToImage', 'imagePreview', 'imageInput']),
+  imagePreview: new Set(['textToImage', 'imageToImage', 'imagePreview', 'imageInput']),
   videoPreview: new Set(['textToVideo', 'imageToVideo', 'multiImageVideo', 'keyframe']),
 };
 

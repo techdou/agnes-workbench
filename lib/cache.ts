@@ -119,7 +119,7 @@ export async function loadManifest(): Promise<Manifest> {
   }
 }
 
-async function saveManifest(m: Manifest) {
+export async function saveManifest(m: Manifest) {
   await ensureDirs();
   await fs.writeFile(MANIFEST_PATH, JSON.stringify(m, null, 2), 'utf-8');
 }

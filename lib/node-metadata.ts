@@ -17,6 +17,7 @@ export interface NodeMeta {
 export const NODE_METADATA: NodeMeta[] = [
   // INPUT
   { type: 'text', labelKey: 'node.text', sigil: 'Τ', group: 'input', accent: 'fog' },
+  { type: 'imageInput', labelKey: 'node.imageInput', sigil: '↥', group: 'input', accent: 'amber' },
   // IMAGE
   { type: 'textToImage', labelKey: 'node.textToImage', sigil: 'ℑ', group: 'image', accent: 'phosphor' },
   { type: 'imageToImage', labelKey: 'node.imageToImage', sigil: 'ℜ', group: 'image', accent: 'phosphor' },

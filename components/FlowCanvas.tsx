@@ -29,6 +29,7 @@ import { NodeCreator } from './NodeCreator';
 import { SettingsModal } from './SettingsModal';
 
 import { TextNode } from './nodes/TextNode';
+import { ImageInputNode } from './nodes/ImageInputNode';
 import { TextToImageNode } from './nodes/TextToImageNode';
 import { ImageToImageNode } from './nodes/ImageToImageNode';
 import { TextToVideoNode } from './nodes/TextToVideoNode';
@@ -39,6 +40,7 @@ import { ImagePreviewNode, VideoPreviewNode } from './nodes/PreviewNodes';
 
 const nodeTypes: NodeTypes = {
   text: TextNode,
+  imageInput: ImageInputNode,
   textToImage: TextToImageNode,
   imageToImage: ImageToImageNode,
   textToVideo: TextToVideoNode,

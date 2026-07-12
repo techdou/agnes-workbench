@@ -4,6 +4,7 @@ export type NodeStatus = 'idle' | 'running' | 'done' | 'error';
 
 export type NodeType =
   | 'text'
+  | 'imageInput'
   | 'textToImage'
   | 'imageToImage'
   | 'textToVideo'
@@ -63,6 +64,12 @@ export type KeyframeData = VideoNodeData;
 export interface ImagePreviewData extends BaseNodeData {
   imageUrl?: string; // 来自上游或直接填
   cachedUrl?: string; // 本地缓存后的同源 URL
+}
+
+// 上传图片节点:用户上传的本地图片
+export interface ImageInputData extends BaseNodeData {
+  imageUrl?: string;  // 上传后的同源 URL(/api/cache/[hash])
+  cachedUrl?: string; // 同 imageUrl(保持和其他节点字段一致)
 }
 
 export interface VideoPreviewData extends BaseNodeData {
