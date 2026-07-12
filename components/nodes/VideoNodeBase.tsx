@@ -27,15 +27,8 @@ interface VideoNodeBaseProps {
 export function VideoNodeBase({ id, data, config }: VideoNodeBaseProps) {
   const update = useFlowStore((s) => s.updateNodeData);
   const run = useFlowStore((s) => s.runNode);
+  const cancelNode = useFlowStore((s) => s.cancelNode); // [H1] 真正取消:abort pollVideo
   const t = useTranslation();
-
-  // 取消运行:用 store 内部的 cancelRun(通过 setState 触发)
-  const cancelRun = () => {
-    // cancelRun 是 store 内部函数,这里通过重置 status 来实现 UI 取消信号
-    // 实际的 AbortController 在 executeNode 里检查 cancelled
-    // 用户取消:重新触发带 cancelled 标记的逻辑
-    update(id, { status: 'idle', error: t('toast.runCancelled') });
-  };
 
   return (
     <NodeShell
@@ -47,7 +40,7 @@ export function VideoNodeBase({ id, data, config }: VideoNodeBaseProps) {
       error={data.error}
       hasTarget
       onRun={() => run(id)}
-      onCancel={cancelRun}
+      onCancel={() => cancelNode(id)}
       runLabel={config.runLabel}
     >
       <div

@@ -2,7 +2,6 @@
 
 // 路由级错误边界 —— 捕获页面内运行时错误,避免白屏
 // Phosphor 风格:磷光符号 + 错误信息 + 重试按钮
-'use client';
 
 import { useEffect } from 'react';
 

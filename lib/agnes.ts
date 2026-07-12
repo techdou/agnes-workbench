@@ -17,17 +17,10 @@ const TEXT_MODEL = 'agnes-2.0-flash';
 const IMAGE_MODEL = 'agnes-image-2.1-flash';
 const VIDEO_MODEL = 'agnes-video-v2.0';
 
-// 允许 API route 注入本次请求的 key(来自客户端 X-Agnes-Key 请求头)
-// 优先级:request key > process.env.AGNES_API_KEY
-let requestApiKey: string | null = null;
-
-/** 注入客户端通过 X-Agnes-Key 请求头传来的 key(优先于 env) */
-export function setApiKeyOverride(key?: string | null) {
-  requestApiKey = key || null;
-}
-
-function getApiKey(): string {
-  const key = requestApiKey || process.env.AGNES_API_KEY;
+// API key 解析:优先用客户端通过 X-Agnes-Key 请求头传来的 key,其次环境变量
+// [C2] 不再用模块级变量(并发请求会串 key),改成函数参数透传
+function resolveApiKey(override?: string | null): string {
+  const key = override || process.env.AGNES_API_KEY;
   if (!key) throw new Error('AGNES_API_KEY 未配置,请在设置面板填写或检查环境变量');
   return key;
 }
@@ -42,11 +35,13 @@ interface ChatCompletionResponse {
 }
 
 // ---------- 基础请求 ----------
+// [C2] apiKey 参数显式透传,避免模块级状态并发污染
 
 async function requestJson<T = AgnesJson>(
   method: string,
   path: string,
   payload?: Record<string, unknown>,
+  apiKeyOverride?: string | null,
   timeoutMs = 120000
 ): Promise<T> {
   const controller = new AbortController();
@@ -56,7 +51,7 @@ async function requestJson<T = AgnesJson>(
     const resp = await fetch(`${BASE_URL}${path}`, {
       method,
       headers: {
-        Authorization: `Bearer ${getApiKey()}`,
+        Authorization: `Bearer ${resolveApiKey(apiKeyOverride)}`,
         'Content-Type': 'application/json',
       },
       body,
@@ -81,7 +76,7 @@ function needsTranslation(prompt: string): boolean {
   return /[^\x00-\x7F]/.test(prompt);
 }
 
-export async function translatePromptToEnglish(prompt: string): Promise<string> {
+export async function translatePromptToEnglish(prompt: string, apiKeyOverride?: string | null): Promise<string> {
   if (!needsTranslation(prompt)) return prompt;
   const data = await requestJson<ChatCompletionResponse>('POST', '/v1/chat/completions', {
     model: TEXT_MODEL,
@@ -97,7 +92,7 @@ export async function translatePromptToEnglish(prompt: string): Promise<string> 
     ],
     temperature: 0,
     max_tokens: 800,
-  });
+  }, apiKeyOverride);
   const translated = data.choices?.[0]?.message?.content?.trim();
   if (!translated) throw new Error('翻译失败:返回为空');
   return translated;
@@ -112,7 +107,8 @@ export interface TextResult {
 
 export async function generateText(
   prompt: string,
-  opts?: { system?: string; temperature?: number; maxTokens?: number }
+  opts?: { system?: string; temperature?: number; maxTokens?: number },
+  apiKeyOverride?: string | null
 ): Promise<TextResult> {
   const messages: { role: string; content: string }[] = [];
   if (opts?.system) messages.push({ role: 'system', content: opts.system });
@@ -122,7 +118,7 @@ export async function generateText(
     messages,
     temperature: opts?.temperature ?? 0.7,
     max_tokens: opts?.maxTokens ?? 1024,
-  });
+  }, apiKeyOverride);
   return {
     content: data.choices?.[0]?.message?.content ?? '',
     raw: data,
@@ -155,14 +151,14 @@ function extractImageUrls(data: AgnesJson): string[] {
 }
 
 // 文生图
-export async function textToImage(prompt: string, size = '1024x768'): Promise<ImageResult> {
-  const englishPrompt = await translatePromptToEnglish(prompt);
+export async function textToImage(prompt: string, size = '1024x768', apiKeyOverride?: string | null): Promise<ImageResult> {
+  const englishPrompt = await translatePromptToEnglish(prompt, apiKeyOverride);
   const data = await requestJson<AgnesJson>('POST', '/v1/images/generations', {
     model: IMAGE_MODEL,
     prompt: englishPrompt,
     size,
     extra_body: { response_format: 'url' },
-  });
+  }, apiKeyOverride);
   return { urls: extractImageUrls(data), raw: data };
 }
 
@@ -170,9 +166,10 @@ export async function textToImage(prompt: string, size = '1024x768'): Promise<Im
 export async function imageToImage(
   prompt: string,
   inputImageUrls: string[],
-  size = '1024x768'
+  size = '1024x768',
+  apiKeyOverride?: string | null
 ): Promise<ImageResult> {
-  const englishPrompt = await translatePromptToEnglish(prompt);
+  const englishPrompt = await translatePromptToEnglish(prompt, apiKeyOverride);
   const data = await requestJson<AgnesJson>('POST', '/v1/images/generations', {
     model: IMAGE_MODEL,
     prompt: englishPrompt,
@@ -181,7 +178,7 @@ export async function imageToImage(
       image: inputImageUrls,
       response_format: 'url',
     },
-  });
+  }, apiKeyOverride);
   return { urls: extractImageUrls(data), raw: data };
 }
 
@@ -250,10 +247,11 @@ export interface VideoOptions {
 async function createVideoTask(
   prompt: string,
   opts: VideoOptions,
-  buildPayload: (englishPrompt: string) => Record<string, unknown>
+  buildPayload: (englishPrompt: string) => Record<string, unknown>,
+  apiKeyOverride?: string | null
 ): Promise<VideoCreateResult> {
   validateVideoArgs(opts);
-  const englishPrompt = await translatePromptToEnglish(prompt);
+  const englishPrompt = await translatePromptToEnglish(prompt, apiKeyOverride);
 
   const payload = buildPayload(englishPrompt);
   // 通用可选参数
@@ -268,7 +266,7 @@ async function createVideoTask(
     if (v != null) payload[k] = v;
   }
 
-  const data = await requestJson<AgnesJson>('POST', '/v1/videos', payload);
+  const data = await requestJson<AgnesJson>('POST', '/v1/videos', payload, apiKeyOverride);
   const { id, kind } = pickVideoId(data);
   return {
     videoId: kind === 'video_id' ? id : undefined,
@@ -282,25 +280,27 @@ async function createVideoTask(
 // 文生视频:创建任务
 export function createTextToVideo(
   prompt: string,
-  opts: VideoOptions = {}
+  opts: VideoOptions = {},
+  apiKeyOverride?: string | null
 ): Promise<VideoCreateResult> {
   return createVideoTask(prompt, opts, (englishPrompt) => ({
     model: VIDEO_MODEL,
     prompt: englishPrompt,
-  }));
+  }), apiKeyOverride);
 }
 
 // 图生视频:创建任务(单张参考图)
 export function createImageToVideo(
   prompt: string,
   imageUrl: string,
-  opts: VideoOptions = {}
+  opts: VideoOptions = {},
+  apiKeyOverride?: string | null
 ): Promise<VideoCreateResult> {
   return createVideoTask(prompt, opts, (englishPrompt) => ({
     model: VIDEO_MODEL,
     prompt: englishPrompt,
     image: imageUrl,
-  }));
+  }), apiKeyOverride);
 }
 
 // 多图视频 / 关键帧动画:创建任务
@@ -308,7 +308,8 @@ export function createMultiImageVideo(
   prompt: string,
   imageUrls: string[],
   mode: 'keyframes' | 'ti2vid',
-  opts: VideoOptions = {}
+  opts: VideoOptions = {},
+  apiKeyOverride?: string | null
 ): Promise<VideoCreateResult> {
   return createVideoTask(prompt, opts, (englishPrompt) => ({
     model: VIDEO_MODEL,
@@ -317,7 +318,7 @@ export function createMultiImageVideo(
       image: imageUrls,
       mode,
     },
-  }));
+  }), apiKeyOverride);
 }
 
 // ---------- 视频状态查询 ----------
@@ -346,7 +347,7 @@ function extractVideoUrl(data: AgnesJson): string | undefined {
   return undefined;
 }
 
-export async function getVideoStatus(identifier: string): Promise<VideoStatusResult> {
+export async function getVideoStatus(identifier: string, apiKeyOverride?: string | null): Promise<VideoStatusResult> {
   let path: string;
   if (identifier.startsWith('video_')) {
     const q = new URLSearchParams({ video_id: identifier, model_name: VIDEO_MODEL });
@@ -354,7 +355,7 @@ export async function getVideoStatus(identifier: string): Promise<VideoStatusRes
   } else {
     path = `/v1/videos/${encodeURIComponent(identifier)}`;
   }
-  const data = await requestJson<AgnesJson>('GET', path);
+  const data = await requestJson<AgnesJson>('GET', path, undefined, apiKeyOverride);
   return {
     status: String(data?.status ?? ''),
     progress: typeof data?.progress === 'number' ? data.progress : undefined,

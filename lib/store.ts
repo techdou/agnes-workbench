@@ -224,6 +224,10 @@ interface FlowState {
   // 撤销/重做
   undo: () => void;
   redo: () => void;
+  // 取消节点运行
+  cancelNode: (id: string) => void;
+  // 断开节点所有连线(给右键菜单用,走 action 才能触发 autosave)
+  disconnectNode: (id: string) => void;
 }
 
 // [C3] 运行中的节点控制器:节点ID → 取消函数
@@ -435,6 +439,8 @@ export const useFlowStore = create<FlowState>()(
       edges: [],
       saveStatus: 'saved',
     });
+    // [C1] 切换项目必须清空 undo 历史,否则 Ctrl+Z 会跨项目污染
+    useFlowStore.temporal.getState().clear();
     return id;
   },
 
@@ -448,6 +454,8 @@ export const useFlowStore = create<FlowState>()(
       edges: project.edges || [],
       saveStatus: 'saved',
     });
+    // [C1] 切换项目必须清空 undo 历史
+    useFlowStore.temporal.getState().clear();
     return true;
   },
 
@@ -478,6 +486,8 @@ export const useFlowStore = create<FlowState>()(
     // [C3] 取消所有运行
     for (const id of [...runningControllers.keys()]) cancelRun(id);
     set({ nodes: [], edges: [] });
+    // [C1] 清空 undo 历史
+    useFlowStore.temporal.getState().clear();
     scheduleAutoSave();
   },
 
@@ -490,24 +500,36 @@ export const useFlowStore = create<FlowState>()(
     useFlowStore.temporal.getState().redo();
     scheduleAutoSave();
   },
+
+  // [H1] 真正取消节点运行:调内部 cancelRun 设置 cancelled 标志,abort pollVideo
+  cancelNode: (id) => {
+    cancelRun(id);
+  },
+
+  // [MEDIUM] 断开节点所有连线(走 action 触发 autosave)
+  disconnectNode: (id) => {
+    set({ edges: get().edges.filter((e) => e.source !== id && e.target !== id) });
+    scheduleAutoSave();
+  },
 }),
     {
-      // 只追踪 nodes/edges 的结构变化,过滤掉运行状态等瞬态字段
+      // [H2] 只剥离 running 期间的瞬态(progress),保留 done/error 等真实状态
       partialize: (state) => ({
-        nodes: state.nodes.map((n) => ({
-          ...n,
-          // 剥离瞬态:撤销不该回退运行状态
-          data: { ...n.data, status: 'idle' as const, error: undefined, progress: undefined },
-        })),
+        nodes: state.nodes.map((n) => {
+          const d = n.data as { status?: string; progress?: number };
+          if (d.status === 'running') {
+            // running 期间不入栈(避免 pollVideo 进度变化污染历史)
+            return { ...n, data: { ...n.data, status: 'idle', progress: undefined } };
+          }
+          return n;
+        }),
         edges: state.edges,
       }),
-      // 节流:快速连续操作(如拖拽)不会每帧都入栈
       limit: 50,
-      equality: (pastState, currentState) => {
-        // 比较 nodes/edges 是否真有结构变化(位置也算)
-        return JSON.stringify(pastState) === JSON.stringify(currentState);
-      },
-      wrapTemporal: (store) => store,
+      // [H3] 引用比较替代 JSON.stringify:applyNodeChanges/updateNodeData 都返回新数组
+      // 只有 nodes/edges 引用变了才算新状态,避免每次按键全量序列化
+      equality: (pastState, currentState) =>
+        pastState.nodes === currentState.nodes && pastState.edges === currentState.edges,
     }
   )
 );

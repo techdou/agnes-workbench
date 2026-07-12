@@ -27,9 +27,9 @@ export function ContextMenu({ state, onClose, onAddNodeAt }: ContextMenuProps) {
   const runNode = useFlowStore((s) => s.runNode);
   const duplicateNodes = useFlowStore((s) => s.duplicateNodes);
   const deleteNodes = useFlowStore((s) => s.deleteNodes);
+  const disconnectNode = useFlowStore((s) => s.disconnectNode); // [MEDIUM] 走 store action 触发 autosave
   const nodes = useFlowStore((s) => s.nodes);
   const edges = useFlowStore((s) => s.edges);
-  const onNodesChange = useFlowStore((s) => s.onNodesChange);
   const ref = useRef<HTMLDivElement>(null);
 
   // 点外面关闭
@@ -61,9 +61,8 @@ export function ContextMenu({ state, onClose, onAddNodeAt }: ContextMenuProps) {
     const handleRun = () => { runNode(state.nodeId!); onClose(); };
     const handleDuplicate = () => { duplicateNodes([state.nodeId!]); onClose(); };
     const handleDisconnect = () => {
-      // 删除该节点所有连线
-      const remainingEdges = edges.filter((e) => e.source !== state.nodeId && e.target !== state.nodeId);
-      useFlowStore.setState({ edges: remainingEdges });
+      // [MEDIUM] 走 store action,触发 autosave
+      disconnectNode(state.nodeId!);
       onClose();
     };
     const handleDelete = () => { deleteNodes([state.nodeId!]); onClose(); };
