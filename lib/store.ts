@@ -3,6 +3,7 @@
 // 全局画布状态 + 节点执行引擎
 // 支持:项目制(IndexedDB 多画布)、自动保存、上游自动拓扑执行、轮询取消、指数退避、连线类型校验
 import { create } from 'zustand';
+import { temporal } from 'zundo';
 import {
   addEdge,
   applyEdgeChanges,
@@ -220,6 +221,9 @@ interface FlowState {
   persistCurrentProject: () => Promise<void>;
   setSaveStatus: (s: SaveStatus) => void;
   clearAll: () => void;
+  // 撤销/重做
+  undo: () => void;
+  redo: () => void;
 }
 
 // [C3] 运行中的节点控制器:节点ID → 取消函数
@@ -227,7 +231,9 @@ const runningControllers = new Map<string, () => void>();
 // [M3] 运行中的节点 Promise:节点ID → 正在执行的 Promise
 const runningPromises = new Map<string, Promise<void>>();
 
-export const useFlowStore = create<FlowState>((set, get) => ({
+export const useFlowStore = create<FlowState>()(
+  temporal(
+    (set, get) => ({
   nodes: [],
   edges: [],
   currentProjectId: null,
@@ -474,7 +480,37 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     set({ nodes: [], edges: [] });
     scheduleAutoSave();
   },
-}));
+
+  // 撤销/重做
+  undo: () => {
+    useFlowStore.temporal.getState().undo();
+    scheduleAutoSave();
+  },
+  redo: () => {
+    useFlowStore.temporal.getState().redo();
+    scheduleAutoSave();
+  },
+}),
+    {
+      // 只追踪 nodes/edges 的结构变化,过滤掉运行状态等瞬态字段
+      partialize: (state) => ({
+        nodes: state.nodes.map((n) => ({
+          ...n,
+          // 剥离瞬态:撤销不该回退运行状态
+          data: { ...n.data, status: 'idle' as const, error: undefined, progress: undefined },
+        })),
+        edges: state.edges,
+      }),
+      // 节流:快速连续操作(如拖拽)不会每帧都入栈
+      limit: 50,
+      equality: (pastState, currentState) => {
+        // 比较 nodes/edges 是否真有结构变化(位置也算)
+        return JSON.stringify(pastState) === JSON.stringify(currentState);
+      },
+      wrapTemporal: (store) => store,
+    }
+  )
+);
 
 // ---------- 执行单个节点(内部) ----------
 

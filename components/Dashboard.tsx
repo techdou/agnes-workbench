@@ -9,6 +9,7 @@ import { useSettings } from '@/lib/settings';
 import { useTranslation } from '@/lib/i18n';
 import { useToast } from '@/lib/useToast';
 import { importWorkflow } from '@/lib/workflow-io';
+import { TEMPLATES, type WorkflowTemplate } from '@/lib/templates';
 import { ProjectCard } from './ProjectCard';
 import { SettingsModal } from './SettingsModal';
 
@@ -48,6 +49,37 @@ export function Dashboard() {
 
   async function handleImportClick() {
     fileInputRef.current?.click();
+  }
+
+  // 从模板创建项目
+  async function createFromTemplate(template: WorkflowTemplate) {
+    const { genId } = await import('@/lib/store');
+    const id = genId('proj');
+    const now = new Date().toISOString();
+    // 深拷贝模板的 nodes/edges,重新生成 id 避免冲突
+    const idMap = new Map<string, string>();
+    const nodes = template.nodes.map((n) => {
+      const newId = genId(n.type || 'node');
+      idMap.set(n.id, newId);
+      return { ...n, id: newId, data: { ...n.data } };
+    });
+    const edges = template.edges.map((e) => ({
+      ...e,
+      id: genId('edge'),
+      source: idMap.get(e.source) || e.source,
+      target: idMap.get(e.target) || e.target,
+    }));
+    const project: Project = {
+      id,
+      name: t(template.nameKey),
+      nodes,
+      edges,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await saveProject(project);
+    pushToast(t('toast.projectCreated'), 'success');
+    router.push(`/canvas/${id}`);
   }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -182,6 +214,42 @@ export function Dashboard() {
             >
               + {t('dashboard.empty.create')}
             </button>
+
+            {/* 模板区 */}
+            <div className="mt-10 w-full max-w-3xl">
+              <p className="mb-4 font-mono text-[10px] tracking-[0.2em]" style={{ color: 'var(--c-text-faint)' }}>
+                {t('template.section')}
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {TEMPLATES.map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    onClick={() => createFromTemplate(tpl)}
+                    className="group flex flex-col gap-2 rounded-md border p-4 text-left transition-all hover:-translate-y-0.5"
+                    style={{ borderColor: 'var(--c-edge)', background: 'var(--c-ink)' }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="flex h-8 w-8 items-center justify-center rounded border text-base"
+                        style={{
+                          borderColor: 'color-mix(in srgb, var(--c-amber) 30%, transparent)',
+                          background: 'color-mix(in srgb, var(--c-amber) 8%, transparent)',
+                          color: 'var(--c-amber)',
+                        }}
+                      >
+                        {tpl.icon}
+                      </span>
+                      <span className="font-[family-name:var(--font-display)] text-[13px] font-semibold" style={{ color: 'var(--c-text)' }}>
+                        {t(tpl.nameKey)}
+                      </span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed" style={{ color: 'var(--c-text-faint)' }}>
+                      {t(tpl.descKey)}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         ) : (
           <>

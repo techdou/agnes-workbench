@@ -18,6 +18,7 @@ interface NodeShellProps {
   hasSource?: boolean;
   hasTarget?: boolean;
   onRun?: () => void;
+  onCancel?: () => void;  // running 时的取消回调,不传则 running 按钮 disabled
   runLabel?: string;
   children: ReactNode;
 }
@@ -53,6 +54,7 @@ export function NodeShell({
   hasSource = true,
   hasTarget = false,
   onRun,
+  onCancel,
   runLabel = 'EXECUTE',
   children,
 }: NodeShellProps) {
@@ -130,29 +132,46 @@ export function NodeShell({
         </div>
       )}
 
-      {/* [优化2] 运行按钮 + 扫描线 */}
+      {/* [优化2] 运行按钮 + 扫描线 + running 时可取消 */}
       {onRun && (
         <div className="border-t px-3 py-2" style={{ borderColor: 'var(--c-edge)' }}>
-          <button
-            onClick={onRun}
-            disabled={status === 'running'}
-            className="group relative w-full overflow-hidden rounded border px-3 py-1.5 font-mono text-[11px] font-medium tracking-[0.1em] transition-all disabled:cursor-not-allowed disabled:opacity-40"
-            style={{
-              borderColor: 'color-mix(in srgb, var(--c-amber) 50%, transparent)',
-              background: 'color-mix(in srgb, var(--c-amber) 10%, transparent)',
-              color: 'var(--c-amber)',
-            }}
-          >
-            <span className="relative z-10">
-              {status === 'running' ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: 'var(--c-amber)' }} />
-                  {t('node.processing')}
-                </span>
-              ) : (
-                <>▶ {runLabel}</>
-              )}
-            </span>
+          {status === 'running' && onCancel ? (
+            // running + 有取消回调:显示 CANCEL 按钮(可点击)
+            <button
+              onClick={onCancel}
+              className="w-full rounded border px-3 py-1.5 font-mono text-[11px] font-medium tracking-[0.1em] transition-all"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--c-rust) 50%, transparent)',
+                background: 'color-mix(in srgb, var(--c-rust) 12%, transparent)',
+                color: 'var(--c-rust)',
+              }}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: 'var(--c-rust)' }} />
+                ✕ CANCEL
+              </span>
+            </button>
+          ) : (
+            <button
+              onClick={onRun}
+              disabled={status === 'running'}
+              className="group relative w-full overflow-hidden rounded border px-3 py-1.5 font-mono text-[11px] font-medium tracking-[0.1em] transition-all disabled:cursor-not-allowed disabled:opacity-40"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--c-amber) 50%, transparent)',
+                background: 'color-mix(in srgb, var(--c-amber) 10%, transparent)',
+                color: 'var(--c-amber)',
+              }}
+            >
+              <span className="relative z-10">
+                {status === 'running' ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-block h-2 w-2 animate-pulse rounded-full" style={{ background: 'var(--c-amber)' }} />
+                    {t('node.processing')}
+                  </span>
+                ) : (
+                  <>▶ {runLabel}</>
+                )}
+              </span>
             {/* 扫描线:hover 时从左扫到右 */}
             {status !== 'running' && (
               <span
@@ -160,7 +179,8 @@ export function NodeShell({
                 style={{ color: 'var(--c-amber)' }}
               />
             )}
-          </button>
+            </button>
+          )}
         </div>
       )}
 

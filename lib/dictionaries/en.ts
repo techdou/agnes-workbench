@@ -89,6 +89,34 @@ const en = {
   'node.emptyText': 'Text node is empty',
   'node.runSelected': 'Run selected nodes',
 
+  // Workflow templates
+  'template.section': 'Start from template',
+  'template.use': 'Use Template',
+  'template.t2i.name': 'Text to Image',
+  'template.t2i.desc': 'Text prompt → generate image → preview',
+  'template.i2v.name': 'Image to Video',
+  'template.i2v.desc': 'Text → text-to-image → image-to-video → preview',
+  'template.fusion.name': 'Multi-Image Fusion',
+  'template.fusion.desc': 'Upload 2 reference images → fusion edit → preview',
+
+  // Context menu
+  'context.run': 'Run',
+  'context.duplicate': 'Duplicate',
+  'context.disconnect': 'Disconnect',
+  'context.addHere': 'Add Node Here',
+
+  // Keyboard shortcuts
+  'shortcuts.title': 'Shortcuts',
+  'shortcuts.add': 'Add node',
+  'shortcuts.runSelected': 'Run selected node',
+  'shortcuts.delete': 'Delete selected',
+  'shortcuts.duplicate': 'Duplicate selected',
+  'shortcuts.undo': 'Undo',
+  'shortcuts.redo': 'Redo',
+  'shortcuts.multiSelect': 'Multi-select (hold)',
+  'shortcuts.deselect': 'Deselect all',
+  'shortcuts.shortcutList': 'Shortcut list',
+
   // Command Palette
   'palette.placeholder': 'Search node types…',
   'palette.empty': 'No matching nodes',

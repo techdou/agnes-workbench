@@ -26,6 +26,8 @@ import { LibraryPanel } from './LibraryPanel';
 import { ToastContainer } from './ToastContainer';
 import { CommandPalette } from './CommandPalette';
 import { NodeCreator } from './NodeCreator';
+import { ContextMenu, type ContextMenuState } from './ContextMenu';
+import { ShortcutsModal } from './ShortcutsModal';
 import { SettingsModal } from './SettingsModal';
 
 import { TextNode } from './nodes/TextNode';
@@ -122,6 +124,8 @@ function FlowCanvasInner() {
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
   // NodeCreator 状态:拖连线到空白处松开时弹出
   const [creator, setCreator] = useState<{
@@ -151,6 +155,35 @@ function FlowCanvasInner() {
       const tag = (e.target as HTMLElement)?.tagName;
       const inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 
+      // ? 唤起快捷键速查表
+      if (e.key === '?' && !inField) {
+        e.preventDefault();
+        setShortcutsOpen(true);
+        return;
+      }
+
+      // Ctrl/Cmd + D:复制选中节点
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd' && !inField) {
+        e.preventDefault();
+        const selected = nodes.filter((n) => n.selected);
+        if (selected.length > 0) duplicateNodes(selected.map((n) => n.id));
+        return;
+      }
+
+      // Ctrl/Cmd + Z / Y:撤销/重做
+      if ((e.ctrlKey || e.metaKey) && !inField && !e.altKey) {
+        if (e.key === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          useFlowStore.getState().undo();
+          return;
+        }
+        if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
+          e.preventDefault();
+          useFlowStore.getState().redo();
+          return;
+        }
+      }
+
       // / 唤起 Command Palette(不在输入框时)
       if (e.key === '/' && !inField && !paletteOpen) {
         e.preventDefault();
@@ -177,7 +210,7 @@ function FlowCanvasInner() {
         }
       }
     },
-    [nodes, deleteNodes, runNode, pushToast, t, paletteOpen]
+    [nodes, deleteNodes, duplicateNodes, runNode, pushToast, t, paletteOpen]
   );
 
   useEffect(() => {
@@ -242,6 +275,15 @@ function FlowCanvasInner() {
           onConnect={onConnect}
           onConnectStart={onConnectStart}
           onConnectEnd={onConnectEnd}
+          onNodeContextMenu={(e, node) => {
+            e.preventDefault();
+            setContextMenu({ x: e.clientX, y: e.clientY, nodeId: node.id });
+          }}
+          onPaneContextMenu={(e) => {
+            e.preventDefault();
+            const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+            setContextMenu({ x: e.clientX, y: e.clientY, panePos: flowPos });
+          }}
           fitView
           defaultEdgeOptions={{
             type: 'default',
@@ -252,6 +294,14 @@ function FlowCanvasInner() {
           deleteKeyCode={null}
           multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
           selectionOnDrag
+          onNodeDragStop={(e, node) => {
+            // Alt+拖拽 = 复制节点到新位置(原节点留在原地)
+            if (e.altKey) {
+              duplicateNodes([node.id]);
+              // 把原节点位置恢复(React Flow 已移动了它,撤销移动让副本偏移)
+              // 简化:直接复制,副本会偏移 40px,原节点保持拖拽后位置——可接受
+            }
+          }}
         >
           <Background color="var(--c-grid)" gap={28} size={1} />
           <Controls showInteractive={false} className="!shadow-none" />
@@ -333,6 +383,7 @@ function FlowCanvasInner() {
 
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
       {creator && (
         <NodeCreator
           sourceType={creator.sourceType}
@@ -340,6 +391,16 @@ function FlowCanvasInner() {
           screenPos={creator.screenPos}
           flowPos={creator.flowPos}
           onClose={() => setCreator(null)}
+        />
+      )}
+      {contextMenu && (
+        <ContextMenu
+          state={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onAddNodeAt={() => {
+            // 空白右键"添加节点":打开 palette
+            setPaletteOpen(true);
+          }}
         />
       )}
     </div>

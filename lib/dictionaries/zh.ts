@@ -89,6 +89,34 @@ const zh = {
   'node.emptyText': '文本节点内容为空',
   'node.runSelected': '运行选中节点',
 
+  // 工作流模板
+  'template.section': '从模板开始',
+  'template.use': '使用模板',
+  'template.t2i.name': '文生图基础',
+  'template.t2i.desc': '文本提示词 → 生成图片 → 预览',
+  'template.i2v.name': '图生视频',
+  'template.i2v.desc': '文本 → 文生图 → 图生视频 → 预览',
+  'template.fusion.name': '多图融合',
+  'template.fusion.desc': '上传两张参考图 → 融合编辑 → 预览',
+
+  // 右键菜单
+  'context.run': '运行',
+  'context.duplicate': '复制节点',
+  'context.disconnect': '断开连线',
+  'context.addHere': '在此添加节点',
+
+  // 快捷键速查表
+  'shortcuts.title': '快捷键',
+  'shortcuts.add': '添加节点',
+  'shortcuts.runSelected': '运行选中节点',
+  'shortcuts.delete': '删除选中',
+  'shortcuts.duplicate': '复制选中',
+  'shortcuts.undo': '撤销',
+  'shortcuts.redo': '重做',
+  'shortcuts.multiSelect': '多选(按住)',
+  'shortcuts.deselect': '取消选中',
+  'shortcuts.shortcutList': '快捷键速查表',
+
   // Command Palette
   'palette.placeholder': '搜索节点类型…',
   'palette.empty': '未找到匹配的节点',

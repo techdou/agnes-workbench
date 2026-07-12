@@ -52,7 +52,23 @@ export function TextToImageNode({ id, data }: { id: string; data: TextToImageDat
           </option>
         ))}
       </select>
-      {data.cachedUrl && <ResultThumb url={data.cachedUrl} />}
+      {data.cachedUrl && (
+        <>
+          <ResultThumb url={data.cachedUrl} />
+          <a
+            href={data.cachedUrl}
+            download={`agnes-image-${id}.png`}
+            className="flex items-center justify-center gap-1.5 rounded border px-3 py-1.5 font-mono text-[10px] tracking-[0.15em] transition-all"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--c-phosphor) 40%, transparent)',
+              background: 'var(--c-void)',
+              color: 'var(--c-phosphor)',
+            }}
+          >
+            ↓ {t('node.download')}
+          </a>
+        </>
+      )}
     </NodeShell>
   );
 }
