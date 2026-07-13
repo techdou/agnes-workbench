@@ -17,6 +17,10 @@ export interface AppSettings {
   // API
   apiKey: string; // 留空则用 .env 的 AGNES_API_KEY
   baseUrl: string; // 留空则用默认
+  // 模型名(留空用默认值,支持自定义填入服务商 update 后的新模型)
+  textModel: string;
+  imageModel: string;
+  videoModel: string;
   // 生成默认值
   defaultImageSize: string;
   defaultVideoFrames: number;
@@ -34,6 +38,9 @@ export interface AppSettings {
 export const DEFAULT_SETTINGS: AppSettings = {
   apiKey: '',
   baseUrl: '',
+  textModel: 'agnes-2.0-flash',
+  imageModel: 'agnes-image-2.1-flash',
+  videoModel: 'agnes-video-v2.0',
   defaultImageSize: '1024x768',
   defaultVideoFrames: 121,
   defaultVideoFps: 24,

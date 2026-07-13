@@ -1,6 +1,6 @@
 'use client';
 
-// 设置弹窗 —— API / 生成参数 / 外观 / 语言 四个 tab
+// 设置弹窗 —— API / 模型 / 生成参数 / 外观 / 语言 五个 tab
 // 毛玻璃背景 + 左侧 tab 栏,样式沿用 Phosphor 设计系统
 import { useState, useEffect } from 'react';
 import { useSettings, type Language, type Theme } from '@/lib/settings';
@@ -10,10 +10,11 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type Tab = 'api' | 'generation' | 'appearance' | 'language';
+type Tab = 'api' | 'models' | 'generation' | 'appearance' | 'language';
 
 const TABS: { key: Tab; icon: string; labelKey: string }[] = [
   { key: 'api', icon: '🔑', labelKey: 'settings.tab.api' },
+  { key: 'models', icon: '◇', labelKey: 'settings.tab.models' },
   { key: 'generation', icon: '⚙', labelKey: 'settings.tab.generation' },
   { key: 'appearance', icon: '◐', labelKey: 'settings.tab.appearance' },
   { key: 'language', icon: '言', labelKey: 'settings.tab.language' },
@@ -70,6 +71,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         {/* 右侧内容 */}
         <div className="flex-1 overflow-y-auto p-6">
           {tab === 'api' && <ApiTab settings={settings} update={update} t={t} />}
+          {tab === 'models' && <ModelsTab settings={settings} update={update} t={t} />}
           {tab === 'generation' && <GenTab settings={settings} update={update} t={t} />}
           {tab === 'appearance' && <AppearanceTab settings={settings} update={update} t={t} />}
           {tab === 'language' && <LanguageTab settings={settings} update={update} t={t} />}
@@ -176,6 +178,158 @@ function ApiTab({ settings, update, t }: TabProps) {
 const SIZES = ['1024x768', '1024x1024', '768x1024', '1280x768', '720x1280'];
 const FRAME_OPTIONS = [81, 121, 161, 241, 441];
 const FPS_OPTIONS = [24, 30];
+
+function ModelsTab({ settings, update, t }: TabProps) {
+  const [models, setModels] = useState<string[]>([]);
+  const [fetching, setFetching] = useState(false);
+  const [fetchMsg, setFetchMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function fetchModels() {
+    setFetching(true);
+    setFetchMsg(null);
+    try {
+      // 构造请求头(带 API key)
+      const headers: Record<string, string> = {};
+      if (settings.apiKey) headers['X-Agnes-Key'] = settings.apiKey;
+      const resp = await fetch('/api/agnes/models', { headers });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      if (data.models && Array.isArray(data.models)) {
+        setModels(data.models);
+        setFetchMsg({ ok: true, text: t('settings.models.fetchOk', { count: data.models.length }) });
+      } else {
+        throw new Error(data.error || 'Invalid response');
+      }
+    } catch (e: unknown) {
+      setFetchMsg({ ok: false, text: `${t('settings.models.fetchFail')}: ${e instanceof Error ? e.message : String(e)}` });
+    } finally {
+      setFetching(false);
+    }
+  }
+
+  const defaults = { textModel: 'agnes-2.0-flash', imageModel: 'agnes-image-2.1-flash', videoModel: 'agnes-video-v2.0' };
+
+  return (
+    <div>
+      {/* 拉取按钮 */}
+      <div className="mb-5 flex items-center gap-3">
+        <button
+          onClick={fetchModels}
+          disabled={fetching}
+          className="rounded border px-4 py-2 font-mono text-[11px] tracking-wider transition-colors disabled:opacity-50"
+          style={{ borderColor: 'var(--c-phosphor)', color: 'var(--c-phosphor)' }}
+        >
+          {fetching ? t('settings.models.fetching') : `↻ ${t('settings.models.fetchLatest')}`}
+        </button>
+        {fetchMsg && (
+          <span
+            className="font-mono text-[11px]"
+            style={{ color: fetchMsg.ok ? 'var(--c-phosphor)' : 'var(--c-rust)' }}
+          >
+            {fetchMsg.ok ? '✓' : '✕'} {fetchMsg.text}
+          </span>
+        )}
+      </div>
+
+      {/* 可用模型列表(拉取后显示) */}
+      {models.length > 0 && (
+        <div className="mb-5 rounded border p-3" style={{ borderColor: 'var(--c-edge)', background: 'var(--c-void)' }}>
+          <p className="mb-2 font-mono text-[9px] tracking-[0.15em]" style={{ color: 'var(--c-text-faint)' }}>
+            {t('settings.docs.models')} ({models.length})
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {models.map((m) => (
+              <span
+                key={m}
+                className="rounded border px-2 py-0.5 font-mono text-[10px]"
+                style={{ borderColor: 'var(--c-line)', color: 'var(--c-text-dim)' }}
+              >
+                {m}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <p className="mb-4 text-[11px]" style={{ color: 'var(--c-text-faint)' }}>
+        {t('settings.models.customHint')}
+      </p>
+
+      {/* 三个模型输入框(带 datalist 自动补全) */}
+      <datalist id="agnes-models-list">
+        {models.map((m) => <option key={m} value={m} />)}
+      </datalist>
+
+      <Field label={t('settings.models.textModel')}>
+        <input
+          list="agnes-models-list"
+          value={settings.textModel}
+          onChange={(e) => update({ textModel: e.target.value })}
+          placeholder={defaults.textModel}
+          className={inputClass}
+          style={inputStyle}
+        />
+      </Field>
+
+      <Field label={t('settings.models.imageModel')}>
+        <input
+          list="agnes-models-list"
+          value={settings.imageModel}
+          onChange={(e) => update({ imageModel: e.target.value })}
+          placeholder={defaults.imageModel}
+          className={inputClass}
+          style={inputStyle}
+        />
+      </Field>
+
+      <Field label={t('settings.models.videoModel')}>
+        <input
+          list="agnes-models-list"
+          value={settings.videoModel}
+          onChange={(e) => update({ videoModel: e.target.value })}
+          placeholder={defaults.videoModel}
+          className={inputClass}
+          style={inputStyle}
+        />
+      </Field>
+
+      <button
+        onClick={() => update(defaults)}
+        className="rounded border px-3 py-1.5 font-mono text-[10px] tracking-wider transition-colors"
+        style={{ borderColor: 'var(--c-line)', color: 'var(--c-text-dim)' }}
+      >
+        ↺ {t('settings.models.reset')}
+      </button>
+
+      {/* 文档链接 */}
+      <div className="mt-6 border-t pt-4" style={{ borderColor: 'var(--c-edge)' }}>
+        <p className="mb-2 font-mono text-[9px] tracking-[0.15em]" style={{ color: 'var(--c-text-faint)' }}>
+          {t('settings.docs.title')}
+        </p>
+        <div className="flex flex-col gap-1.5">
+          <a
+            href="https://agnes-ai.com/zh-Hans/docs/overview"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-[11px] transition-colors hover:underline"
+            style={{ color: 'var(--c-amber)' }}
+          >
+            → {t('settings.docs.overview')}
+          </a>
+          <a
+            href="https://wiki.agnes-ai.com/zh-Hans/docs/overview"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-[11px] transition-colors hover:underline"
+            style={{ color: 'var(--c-amber)' }}
+          >
+            → Wiki {t('settings.docs.overview')}
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function GenTab({ settings, update, t }: TabProps) {
   return (

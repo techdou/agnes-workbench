@@ -37,6 +37,16 @@ function authHeaders(): Record<string, string> {
   return headers;
 }
 
+// 读 settings 里的模型名(透传给 API route,空值不传用服务端默认)
+function modelParams(): Record<string, string> {
+  const s = useSettings.getState().settings;
+  const params: Record<string, string> = {};
+  if (s.textModel) params.textModel = s.textModel;
+  if (s.imageModel) params.imageModel = s.imageModel;
+  if (s.videoModel) params.videoModel = s.videoModel;
+  return params;
+}
+
 async function callImage(
   mode: 'text-to-image' | 'image-to-image',
   prompt: string,
@@ -46,7 +56,7 @@ async function callImage(
   const resp = await fetch('/api/agnes/image', {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ mode, prompt, size, inputImageUrls }),
+    body: JSON.stringify({ mode, prompt, size, inputImageUrls, ...modelParams() }),
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
@@ -59,7 +69,7 @@ async function callText(prompt: string, system?: string): Promise<string> {
   const resp = await fetch('/api/agnes/text', {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ prompt, system, temperature: 0.7 }),
+    body: JSON.stringify({ prompt, system, temperature: 0.7, ...modelParams() }),
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
@@ -74,7 +84,7 @@ async function callVideoCreate(body: Record<string, unknown>): Promise<{ videoId
   const resp = await fetch('/api/agnes/video/create', {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, ...modelParams() }),
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
@@ -84,7 +94,9 @@ async function callVideoCreate(body: Record<string, unknown>): Promise<{ videoId
 }
 
 async function callVideoStatus(id: string): Promise<{ status: string; progress?: number; url?: string; error?: string }> {
-  const resp = await fetch(`/api/agnes/video/status?id=${encodeURIComponent(id)}`, {
+  const s = useSettings.getState().settings;
+  const modelQ = s.videoModel ? `&videoModel=${encodeURIComponent(s.videoModel)}` : '';
+  const resp = await fetch(`/api/agnes/video/status?id=${encodeURIComponent(id)}${modelQ}`, {
     headers: authHeaders(),
   });
   if (!resp.ok) {
