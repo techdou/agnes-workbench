@@ -7,17 +7,17 @@
 [![React Flow](https://img.shields.io/badge/React_Flow-12-blue)](https://reactflow.dev)
 [![CI](https://github.com/techdou/agnes-workbench/actions/workflows/ci.yml/badge.svg)](https://github.com/techdou/agnes-workbench/actions/workflows/ci.yml)
 
-通过拖拽节点、连线编排,一句话驱动 Agnes 的文本、图片、视频全模态生成能力。支持项目管理、工作流导入导出、中英双语、暗/亮双主题。
+通过拖拽节点、连线编排，一句话驱动 Agnes 的文本、图片、视频全模态生成能力。支持项目管理、工作流导入导出、多图参考融合、结构化 prompt 扩写、撤销/重做、中英双语。
 
 ## 🖼️ 演示
 
-**亮色模式** — 跨模态流水线:文本扩写 → 文生图 → 图生图 → 图生视频
+**亮色模式** — 跨模态流水线
 
-![亮色模式 - 跨模态流水线](public/screenshots/demo-1.png)
+![亮色模式](public/screenshots/demo-1.png)
 
 **暗色模式** — 磷光工作室主题
 
-![暗色模式 - Phosphor Studio](public/screenshots/demo-2.png)
+![暗色模式](public/screenshots/demo-2.png)
 
 ---
 
@@ -25,42 +25,64 @@
 
 ### 项目制管理
 
-- **首页 Dashboard** — 打开就是项目卡片列表,缩略图 + 名称 + 时间一目了然
-- **多画布** — 每个项目独立画布,互不干扰
-- **IndexedDB 持久化** — 数据存在浏览器本地,容量充足,关闭不丢
-- **自动保存** — 画布改动 1.5 秒后自动落盘,顶栏显示保存状态
+- **首页 Dashboard** — 项目卡片列表，缩略图 + 名称 + 时间，自动取画布首张生成图当缩略图
+- **IndexedDB 持久化** — 数据存浏览器本地，容量充足，自动保存（1.5s 防抖）
+- **工作流模板** — 3 个预置模板（文生图基础 / 图生视频 / 多图融合），一键创建
+- **导入导出** — `.json` 格式，分享、复用、版本管理
 
-### 工作流导入导出
+### 节点系统（10 种）
 
-- **导出** — 一键下载 `.json` 工作流文件,包含全部节点和连线
-- **导入** — 从 `.json` 恢复工作流,自动创建新项目
-- **格式开放** — 标准 JSON,便于分享、版本管理、二次开发
+| 节点 | 符号 | 能力 |
+|------|------|------|
+| 文本 | Τ | prompt 输入 + 结构化扩写（按目标类型选模板） |
+| 上传图片 | ↥ | 拖拽/点击上传本地图，hash 去重 |
+| 文生图 | ℑ | 文本 → 图片 |
+| 图生图 | ℜ | 多图参考融合编辑（支持 @节点引用） |
+| 文生视频 | Ϝ | 文本 → 视频（异步） |
+| 图生视频 | δ | 图片动画化 |
+| 多图视频 | Σ | 多张参考图生成视频 |
+| 关键帧 | Φ | 两图之间过渡动画 |
+| 图片预览 | ▣ | 展示 + 下载 |
+| 视频预览 | ▶ | 展示 + 下载 |
 
-### 七种生成能力
+### 结构化 Prompt 扩写
 
-| 节点 | 能力 | 对应模型 |
-|------|------|---------|
-| `Τ` 文本 | 文本生成 / LLM prompt 扩写 | `agnes-2.0-flash` |
-| `ℑ` 文生图 | 文本 → 图片 | `agnes-image-2.1-flash` |
-| `ℜ` 图生图 | 基于参考图编辑 | `agnes-image-2.1-flash` |
-| `Ϝ` 文生视频 | 文本 → 视频(异步) | `agnes-video-v2.0` |
-| `δ` 图生视频 | 图片动画化 | `agnes-video-v2.0` |
-| `Σ` 多图视频 | 多张参考图生成视频 | `agnes-video-v2.0` |
-| `Φ` 关键帧 | 两图之间过渡动画 | `agnes-video-v2.0` |
+文本节点勾选「结构化扩写」后，按**目标类型**自动选模板生成专业 prompt（参照 [OpenAI Cookbook](https://developers.openai.com/cookbook/examples/multimodal/image-gen-models-prompting-guide) 规范）：
 
-外加 `▣ 图片预览`、`▶ 视频预览` 两个展示节点,带下载按钮。
+- **文生图**：场景 + 主体 + 细节 + 构图 + 约束（5 段式）
+- **文生视频**：上述 + 镜头运动 + 时间线
+- **图生图**：保留项 + 修改边界（编辑任务专用）
+- **图生视频**：锚定帧 + 运动 + 相机
+- **自动检测**：根据下游连线节点类型自动选模板
 
-### 核心机制
+### @节点引用（多图精确指定）
 
-- **Command Palette** — 按 `/` 唤起节点搜索面板,关键词过滤 + 键盘导航,告别横向滚动
-- **节点连线画布** — React Flow 驱动,拖拽连接,数据从上游流向下游
-- **自动拓扑执行** — 点击下游节点自动跑完所有上游依赖
-- **多选批量操作** — Shift/框选多节点,底部浮动操作栏(复制/删除)
+图生图/图生视频的 prompt 框输入 `@` → 弹出已连线的上游节点列表（带缩略图）→ 选中插入 `{@节点id}`。运行时：
+- 系统解析 `{@xxx}`，按引用顺序提取图片 URL
+- 安全限制：只能引用通过连线连到当前节点的上游节点
+- prompt 里的 `{@xxx}` 替换成自然语言（"the first reference image"），图片走 API 的 image 数组
+
+### 画布交互
+
+| 操作 | 方式 |
+|------|------|
+| **添加节点** | `/` 唤起 Command Palette，或拖连线到空白处弹出推荐 |
+| **右键菜单** | 节点上：运行/复制/断开/删除；空白处：添加节点 |
+| **撤销/重做** | `Ctrl+Z` / `Ctrl+Shift+Z`（zundo，上限 50 步） |
+| **复制节点** | `Ctrl+D` 或 `Alt+拖拽` |
+| **多选** | `Shift+点击` 或框选 |
+| **批量操作** | 底部浮动栏（复制/删除） |
+| **取消生成** | 运行中按钮变 CANCEL，点击真取消（abort fetch） |
+| **快捷键速查** | `?` 弹出全部快捷键 |
+
+### 其他
+
 - **中文 prompt 自动翻译** — 非英文提示词自动翻成英文再调 API
-- **本地永久缓存** — 生成结果自动下载到 `library/`,原 URL 过期也能访问
-- **作品归档** — 右侧抽屉展示历史作品,支持下载
-- **中英双语** — 设置面板一键切换,即时生效
-- **暗/亮双主题** — 磷光工作室风格,持久化
+- **本地永久缓存** — 生成结果下载到 `library/`，原 URL 过期也能访问
+- **作品归档** — 右侧抽屉展示历史作品
+- **中英双语** — 设置面板一键切换，即时生效
+- **暗/亮双主题** — 磷光工作室风格，持久化，首屏防闪烁
+- **动态模型** — 设置面板拉取 Agnes 最新可用模型，支持自定义填入新模型名
 
 ## 🚀 快速开始
 
@@ -68,13 +90,13 @@
 
 前往 [platform.agnes-ai.com](https://platform.agnes-ai.com) → 注册 → API Keys → Create new secret key
 
-> Agnes 目前全模态 API **无限期免费开放**(2026-06 起),无需绑卡。
+> Agnes 目前全模态 API **无限期免费开放**，无需绑卡。
 
 ### 2. 配置环境变量
 
 ```bash
 cp .env.example .env.local
-# 编辑 .env.local,填入你的 API Key
+# 编辑 .env.local，填入你的 API Key
 ```
 
 ### 3. 安装并启动
@@ -86,59 +108,46 @@ npm run dev
 
 打开 [http://localhost:3000](http://localhost:3000)
 
-> 如果 3000 端口被占用,用 `npm run dev -- -p 3939` 指定其他端口。
+> 也可以在设置面板 → API 里直接填 Key（优先于 .env）。
 
 ## 📖 使用方法
 
-### 项目管理
+### 基本流程
 
-1. **打开首页** — 看到 Dashboard 项目卡片列表
-2. **新建项目** — 点 `+ NEW PROJECT` 或空状态的大按钮
-3. **进入画布** — 点项目卡片进入全屏编辑
-4. **返回首页** — 点画布左上角 `←` 返回 Dashboard
-5. **重命名** — 项目卡片上双击名称,或画布顶栏双击项目名
-6. **导入/导出** — Dashboard 顶栏导入,卡片操作菜单或画布顶栏导出
+1. **首页** → 新建项目（或从模板创建）
+2. **画布** → 按 `/` 搜索添加节点，或从节点右侧 ● 拖到空白处弹出推荐
+3. **连线** — 拖拽节点右侧 ● 到下一个节点左侧 ●
+4. **运行** — 点节点底部 EXECUTE，自动先跑完上游
+5. **归档** — 右侧 ARCHIVE 查看历史作品
 
-### 画布操作
+### 文本节点扩写
 
-1. **添加节点** — 按 `/` 唤起 Command Palette,搜索 + Enter 添加
-2. **连线** — 拖拽节点右侧 ● 到下一个节点左侧 ●
-3. **运行** — 点节点底部「▶ EXECUTE」按钮,会自动先跑完上游
-4. **多选** — Shift 点击多个节点,或框选拖拽
-5. **批量删除** — 选中多节点后,底部浮动栏点删除
-6. **归档** — 右上角「◈ ARCHIVE」查看历史作品
+1. 加文本节点，写 prompt
+2. 选「扩写目标」（auto / 文生图 / 文生视频 / 图生图 / 图生视频）
+3. 勾选「结构化扩写」
+4. 点 AUGMENT → 按目标类型的专业模板生成英文 prompt
+
+### 多图融合
+
+1. 加多个「文生图」或「上传图片」节点，生成/上传不同的图
+2. 全部连到同一个「图生图」节点
+3. 在图生图的 prompt 框输入 `@` → 选择上游节点 → 插入引用
+4. 写编辑指令（如「把 {@文生图_a1b2} 的风格融合到 {@上传_c3d4} 的构图」）
+5. 运行 → 模型同时参考所有引用的图
 
 ### 键盘快捷键
 
 | 快捷键 | 功能 |
 |--------|------|
-| `/` | 唤起 Command Palette(节点添加) |
-| `Ctrl/Cmd + Enter` | 运行选中节点 |
-| `Delete` / `Backspace` | 删除选中节点 |
-| `Esc` | 关闭弹窗 / Command Palette |
-| `Shift + 点击` | 多选节点 |
-| 框选拖拽 | 框选多个节点 |
-
-### 典型工作流
-
-**文生图**:
-```
-[文本 Τ] ──→ [文生图 ℑ] ──→ [图片预览 ▣]
-```
-
-**图生视频**:
-```
-[文本 Τ] ──→ [文生图 ℑ] ──→ [图生视频 δ] ──→ [视频预览 ▶]
-```
-
-**关键帧动画**(两图之间过渡):
-```
-[文生图 ℑ] ──┐
-             ├─→ [关键帧 Φ] ──→ [视频预览 ▶]
-[文生图 ℑ] ──┘
-```
-
-**一键全跑**:点工具栏「▶▶ RUN ALL」按拓扑序执行整个画布。
+| `/` | 添加节点（Command Palette） |
+| `?` | 快捷键速查表 |
+| `Ctrl/⌘ + Enter` | 运行选中节点 |
+| `Ctrl/⌘ + D` | 复制选中节点 |
+| `Ctrl/⌘ + Z` | 撤销 |
+| `Ctrl/⌘ + Shift + Z` | 重做 |
+| `Delete` | 删除选中 |
+| `Shift + 点击` | 多选 |
+| 右键 | 上下文菜单 |
 
 ## 🏗️ 技术栈
 
@@ -146,86 +155,96 @@ npm run dev
 |----|------|------|
 | 框架 | Next.js 16 (App Router) | 全栈 TypeScript |
 | 画布 | @xyflow/react 12 | 节点连线引擎 |
-| 状态 | Zustand 5 | 轻量全局状态 |
-| 存储 | IndexedDB (idb-keyval) | 项目持久化,容量充足 |
+| 状态 | Zustand 5 + zundo | 全局状态 + 撤销/重做 |
+| 存储 | IndexedDB (idb-keyval) | 项目持久化 |
 | 样式 | Tailwind CSS 4 | 原子化 CSS |
-| i18n | 自建轻量方案 | 中英双语,零依赖 |
+| i18n | 自建轻量方案 | 中英双语，零依赖 |
 | 字体 | Fraunces + JetBrains Mono | 衬线 + 等宽 |
 | API | Agnes AI | OpenAI 兼容协议 |
+| 测试 | Vitest | 27 个单测 |
 
-**零 Python 依赖,全 TypeScript。**
+**零 Python 依赖，全 TypeScript。**
 
 ## 📁 项目结构
 
 ```
 phosphor-studio/
 ├── app/
-│   ├── page.tsx                      # 首页 Dashboard(项目列表)
-│   ├── canvas/[projectId]/page.tsx   # 画布页(按项目 ID 加载)
-│   ├── layout.tsx                    # 根布局(字体加载)
-│   ├── globals.css                   # 设计系统(双主题 CSS 变量)
-│   └── api/                          # 后端 API Routes
+│   ├── page.tsx                      # 首页 Dashboard
+│   ├── canvas/[projectId]/page.tsx   # 画布页
+│   ├── layout.tsx                    # 根布局（主题防闪烁）
+│   ├── globals.css                   # 设计系统（双主题）
+│   ├── error.tsx + global-error.tsx  # 错误边界
+│   └── api/
 │       ├── agnes/                    # Agnes API 代理
-│       │   ├── text/route.ts         #   文本生成
-│       │   ├── image/route.ts        #   文生图 / 图生图
-│       │   └── video/                #   视频(创建 + 状态轮询)
+│       │   ├── text/                 #   文本生成
+│       │   ├── image/                #   文生图 / 图生图（多图）
+│       │   ├── video/                #   视频（创建 + 状态轮询）
+│       │   └── models/               #   模型列表（GET /v1/models）
 │       ├── cache/                    # 本地缓存代理
-│       └── library/route.ts          # 作品库列表
+│       ├── upload/                   # 图片上传
+│       └── library/                  # 作品库
 ├── components/
-│   ├── Dashboard.tsx                 # 首页项目卡片列表
-│   ├── ProjectCard.tsx               # 项目卡片(缩略图/重命名/操作菜单)
-│   ├── FlowCanvas.tsx                # 画布主组件(键盘/edge/批量操作)
-│   ├── Toolbar.tsx                   # 画布工具栏(返回/运行/导出/设置)
-│   ├── CommandPalette.tsx            # 节点搜索面板(/ 唤起)
-│   ├── SettingsModal.tsx             # 设置弹窗(API/参数/外观/语言)
-│   ├── LibraryPanel.tsx              # 作品归档抽屉
-│   ├── ToastContainer.tsx            # 全局通知
+│   ├── Dashboard.tsx                 # 项目列表
+│   ├── ProjectCard.tsx               # 项目卡片
+│   ├── FlowCanvas.tsx                # 画布（右键/键盘/多选/批量）
+│   ├── Toolbar.tsx                   # 画布工具栏
+│   ├── CommandPalette.tsx            # / 唤起节点搜索
+│   ├── NodeCreator.tsx               # 拖连线到空白弹出推荐
+│   ├── NodeMentionInput.tsx          # @节点引用输入框
+│   ├── ContextMenu.tsx               # 右键菜单
+│   ├── ShortcutsModal.tsx            # 快捷键速查
+│   ├── SettingsModal.tsx             # 设置（API/模型/参数/外观/语言）
+│   ├── LibraryPanel.tsx              # 作品归档
 │   └── nodes/                        # 节点组件
-│       ├── NodeShell.tsx             #   节点外壳(色条/状态灯/扫描线)
-│       ├── VideoNodeBase.tsx         #   视频节点基类(配置驱动)
-│       └── ...                       #   各具体节点
+│       ├── NodeShell.tsx             #   节点外壳
+│       ├── VideoNodeBase.tsx         #   视频节点基类
+│       └── ...
 ├── lib/
-│   ├── db.ts                         # IndexedDB 存储层
 │   ├── store.ts                      # Zustand 状态 + 执行引擎
-│   ├── settings.ts                   # 全局设置(API Key/语言/默认参数)
-│   ├── i18n.ts                       # 国际化(中英双语)
-│   ├── dictionaries/                 # 翻译字典
-│   │   ├── zh.ts                     #   中文
-│   │   └── en.ts                     #   英文
-│   ├── agnes.ts                      # Agnes API 客户端
-│   ├── cache.ts                      # 本地缓存管理(并发安全)
-│   ├── workflow.ts                   # 工作流引擎(拓扑排序)
-│   ├── workflow-io.ts                # 工作流导入导出
-│   ├── types.ts                      # TypeScript 类型定义
-│   └── useToast.ts                   # Toast 通知 store
-├── public/                           # 静态资源
-├── .env.example                      # 环境变量模板(不含真实 key)
-└── library/                          # 本地作品库(gitignore,运行时生成)
+│   ├── agnes.ts                      # Agnes API 客户端（动态模型）
+│   ├── prompt-templates.ts           # 结构化扩写模板
+│   ├── prompt-resolve.ts             # @引用解析 + 目标检测
+│   ├── settings.ts                   # 全局设置
+│   ├── db.ts                         # IndexedDB 存储
+│   ├── i18n.ts + dictionaries/       # 国际化
+│   ├── node-metadata.ts              # 节点元数据（统一定义）
+│   ├── workflow.ts                   # 拓扑排序
+│   ├── workflow-io.ts                # 导入导出
+│   ├── templates.ts                  # 工作流模板
+│   ├── cache.ts                      # 缓存管理（SSRF 防护）
+│   └── __tests__/                    # 单元测试（27 个）
+└── public/                           # 静态资源
 ```
 
 ## ⚙️ 设置
 
-点击界面右上角齿轮图标打开设置面板:
+点击界面齿轮图标：
 
-| 分类 | 选项 |
-|------|------|
-| **API** | API Key、Base URL、连接测试 |
+| Tab | 选项 |
+|-----|------|
+| **API** | API Key（覆盖 .env）、Base URL、连接测试 |
+| **模型** | 拉取 Agnes 最新模型列表、自定义文本/图片/视频模型名、开发者文档链接 |
 | **生成参数** | 默认图片尺寸、视频帧数/帧率、自动翻译开关 |
-| **外观** | 主题(暗/亮)、节点动画 |
+| **外观** | 主题（暗/亮）、节点动画 |
 | **语言** | 中文 / English |
-
-> API Key 优先使用环境变量(`.env.local` 或部署平台环境变量),设置面板的 Key 为可选覆盖。
 
 ## 🎨 设计系统
 
-采用 **Phosphor Studio** 美学方向:
+- **配色** — 深蓝黑底（`#0a0e14`）+ 琥珀橙（`#f4a261`）+ 磷光绿（`#7dd3a0`）
+- **字体** — Fraunces（衬线）+ JetBrains Mono（等宽）
+- **节点符号** — 希腊字母（Τ/ℑ/Ϝ/Σ/Φ）
+- **动效** — 连线流动、状态灯闪烁、扫描线、进度条发光
+- **连线方向** — source handle 琥珀色圆形强发光，target handle 磷光绿圆角方形
 
-- **配色** — 深蓝黑底(`#0a0e14`)+ 琥珀橙(`#f4a261`)+ 磷光绿(`#7dd3a0`)
-- **字体** — Fraunces(衬线,有温度)+ JetBrains Mono(等宽,工程感)
-- **节点符号** — 希腊字母标识类型(Τ/ℑ/Ϝ/Σ/Φ)
-- **动效** — 连线流动、状态灯闪烁、按钮扫描线、进度条发光
+## 🔒 安全
 
-亮色模式:暖米白底 + 深琥珀 + 墨绿,一键切换,持久化。
+- API Key 存在 `.env.local`（或设置面板），`.gitignore` 排除，**不入库**
+- 生成内容缓存在 `library/`，不入库
+- 缓存代理 SSRF 白名单（只允许 Agnes 域名）
+- 路径遍历防护
+- 文件大小上限 200MB（缓存）/ 20MB（上传）
+- @节点引用安全限制（只允许引用已连线节点）
 
 ## 🚢 部署
 
@@ -235,41 +254,24 @@ phosphor-studio/
 npm run build && npm start
 ```
 
-### Vercel(推荐,一键部署)
+### Vercel
 
-1. 打开 [vercel.com](https://vercel.com) → Import Git Repository → 选 `techdou/agnes-workbench`
-2. **Environment Variables** 里添加:
-   - `AGNES_API_KEY` = `你的真实 key`
-   - `AGNES_BASE_URL` = `https://apihub.agnes-ai.com`(可选,有默认值)
-3. Deploy
+1. [vercel.com](https://vercel.com) → Import → 选 `techdou/agnes-workbench`
+2. Environment Variables 添加 `AGNES_API_KEY`
+3. Deploy（`vercel.json` 已配置香港节点）
 
-> 仓库里已有 `vercel.json`,默认部署到香港节点(`hkg1`),国内访问较快。
-
-> ⚠️ **Vercel 缓存限制**:Vercel serverless 函数的文件系统是临时的,`library/` 本地缓存在 Vercel 上**不会持久化**。生成内容能实时显示,但刷新后缓存可能丢失。如需持久缓存,请接入 Vercel Blob / S3 等对象存储。**自部署(`npm start`)则无此限制**。
+> ⚠️ Vercel serverless 文件系统临时，`library/` 缓存不持久。自部署无此限制。
 
 ## 🔧 CI/CD
 
-GitHub Actions 在每次 push/PR 时自动运行:
-
-- 依赖安装(`npm ci`)
-- TypeScript 类型检查(`tsc --noEmit`)
-- 生产构建(`npm run build`)
-
-构建状态徽章在 README 顶部。失败会阻止合并,保证主干始终可构建。
+GitHub Actions：push/PR 自动跑 `npm ci` + `tsc --noEmit` + `npm run build`。
 
 ## ⚠️ 限制
 
-- 免费用户视频 RPM ≈ 1 次/分钟,单次生成约 30-60 秒
-- `num_frames` 必须满足 `8n+1`(81/121/241/441),已预设选项
-- 视频宽高必须是 8 的倍数
-- Agnes 的 `ti2vid` 模式限 1 张图,多图自动切 `keyframes` 模式
-
-## 🔒 安全说明
-
-- API Key 存在 `.env.local`,已被 `.gitignore` 排除,**不会入库**
-- 生成内容缓存在本地 `library/` 目录,同样不入库
-- 部署时通过环境变量注入 Key,不硬编码到代码
-- 缓存代理有 SSRF 白名单防护,只允许 Agnes 域名资源
+- 视频免费 RPM ≈ 1 次/分钟，单次 30-60 秒
+- `num_frames` 必须 8n+1（81/121/241/441）
+- 视频宽高必须 8 的倍数
+- 多图视频 ≥ 2 张图自动切 `keyframes` 模式
 
 ## 📝 License
 
