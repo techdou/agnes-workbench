@@ -21,10 +21,15 @@ export interface BaseNodeData {
   [key: string]: unknown;
 }
 
+// 文本节点的扩写目标类型(auto = 自动检测下游节点类型)
+export type PromptTarget = 'auto' | 'textToImage' | 'textToVideo' | 'imageToImage' | 'imageToVideo';
+
 export interface TextNodeData extends BaseNodeData {
   text: string;
-  // 可选:是否用 LLM 增强 prompt
+  // 可选:是否用 LLM 结构化扩写 prompt
   enhance?: boolean;
+  // 扩写目标类型:决定使用哪种 prompt 模板(场景/主体/细节/构图/约束)
+  targetType?: PromptTarget;
 }
 
 export interface TextToImageData extends BaseNodeData {

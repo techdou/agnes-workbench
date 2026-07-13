@@ -26,6 +26,7 @@ import {
   type Project,
 } from './db';
 import { useSettings } from './settings';
+import { buildEnhanceSystemPrompt } from './prompt-templates';
 
 // ---------- API 调用封装 ----------
 
@@ -569,14 +570,14 @@ async function executeNode(id: string): Promise<void> {
 
     // 1. 文本节点
     if (nodeType === 'text') {
-      const d = target.data as { text?: string; enhance?: boolean };
+      const d = target.data as { text?: string; enhance?: boolean; targetType?: string };
       const text = d.text || '';
       if (!text) throw new Error(t('node.emptyText'));
-      // [C2] 扩写失败要报错,不再静默成功
+      // 结构化扩写:按 targetType 选模板(auto 自动检测下游)
       if (d.enhance) {
-        const expanded = await callText(
-          `Expand this image/video generation idea into a detailed English prompt with subject, scene, style, lighting, composition. Return only the prompt.\n\nIdea: ${text}`
-        );
+        const targetType = resolveTargetType(d.targetType || 'auto', nodes, edges, id);
+        const systemPrompt = buildEnhanceSystemPrompt(targetType);
+        const expanded = await callText(`${text}`, systemPrompt);
         if (cancelled) return;
         updateNodeData(id, { text: expanded, status: 'done' });
         return;
@@ -594,10 +595,16 @@ async function executeNode(id: string): Promise<void> {
       if (!prompt) throw new Error(t('error.missingPrompt'));
 
       const mode = nodeType === 'imageToImage' ? 'image-to-image' : 'text-to-image';
-      // 图生图:传全部上游图片作为参考(支持多图融合)
-      const inputImages = nodeType === 'imageToImage' ? upstream.images : undefined;
-      if (inputImages && inputImages.length === 0) {
-        throw new Error(t('error.imageToImageNoInput'));
+
+      // @引用解析:如果有 {@节点id} 标记,按引用顺序取特定上游图片;否则用全部上游图片
+      let inputImages: string[] | undefined;
+      if (nodeType === 'imageToImage') {
+        const { resolvedPrompt, referencedImages } = resolveImageRefs(prompt, nodes, edges, id);
+        prompt = resolvedPrompt;
+        inputImages = referencedImages.length > 0 ? referencedImages : upstream.images;
+        if (inputImages.length === 0) {
+          throw new Error(t('error.imageToImageNoInput'));
+        }
       }
 
       const size = d.size || settings.defaultImageSize;
@@ -633,15 +640,22 @@ async function executeNode(id: string): Promise<void> {
       if (nodeType === 'textToVideo') {
         createBody = { mode: 'text', prompt, ...common };
       } else if (nodeType === 'imageToVideo') {
-        const img = upstream.images[0];
+        // @引用:如果有 {@节点id},用引用的图;否则取第一张上游图
+        const { resolvedPrompt, referencedImages } = resolveImageRefs(prompt, nodes, edges, id);
+        prompt = resolvedPrompt;
+        const img = referencedImages[0] || upstream.images[0];
         if (!img) throw new Error(t('error.imageToVideoNoInput'));
         createBody = { mode: 'image', prompt, imageUrl: img, ...common };
       } else {
-        if (upstream.images.length === 0) throw new Error(t('error.multiImageNoInput'));
+        // multiImageVideo / keyframe:@引用解析
+        const { resolvedPrompt, referencedImages } = resolveImageRefs(prompt, nodes, edges, id);
+        prompt = resolvedPrompt;
+        const imgs = referencedImages.length > 0 ? referencedImages : upstream.images;
+        if (imgs.length === 0) throw new Error(t('error.multiImageNoInput'));
         createBody = {
           mode: nodeType === 'keyframe' ? 'keyframe' : 'multi',
           prompt,
-          imageUrls: upstream.images,
+          imageUrls: imgs,
           ...common,
         };
       }
@@ -692,6 +706,66 @@ async function executeNode(id: string): Promise<void> {
 }
 
 // ---------- 辅助函数 ----------
+
+/**
+ * 解析文本节点的扩写目标类型
+ * auto 模式:查 edges 找下游节点类型
+ */
+function resolveTargetType(
+  target: string,
+  nodes: Node[],
+  edges: Edge[],
+  nodeId: string
+): string {
+  if (target !== 'auto') return target;
+  // 查下游:当前节点的输出连到了哪些节点
+  const downstreamIds = edges.filter((e) => e.source === nodeId).map((e) => e.target);
+  for (const did of downstreamIds) {
+    const dn = nodes.find((n) => n.id === did);
+    if (dn?.type) return dn.type;
+  }
+  return 'auto'; // 没找到下游,用通用模板
+}
+
+/**
+ * 解析 prompt 里的 {@节点id} 引用,返回引用的图片 URL 列表 + 替换后的 prompt
+ * 安全:只允许引用通过 edges 连线到当前节点的上游节点
+ */
+function resolveImageRefs(
+  prompt: string,
+  nodes: Node[],
+  edges: Edge[],
+  nodeId: string
+): { resolvedPrompt: string; referencedImages: string[] } {
+  const upstreamIds = new Set(edges.filter((e) => e.target === nodeId).map((e) => e.source));
+  const referencedImages: string[] = [];
+  let imageIdx = 0;
+
+  // 匹配 {@xxx} 格式的引用
+  const resolvedPrompt = prompt.replace(/\{@([^}]+)\}/g, (match, refId) => {
+    // 安全检查:只允许引用已连线的上游节点
+    if (!upstreamIds.has(refId)) return match;
+
+    const srcNode = nodes.find((n) => n.id === refId);
+    if (!srcNode) return match;
+
+    const d = srcNode.data as { resultUrl?: string; imageUrl?: string; cachedUrl?: string };
+    const imgUrl = d.resultUrl || d.imageUrl || d.cachedUrl;
+    if (!imgUrl) return match;
+
+    referencedImages.push(imgUrl);
+    imageIdx++;
+    // 替换成自然语言描述(API 看到的是文字,图片走 extra_body.image 数组)
+    return `the ${ordinal(imageIdx)} reference image`;
+  });
+
+  return { resolvedPrompt, referencedImages };
+}
+
+function ordinal(n: number): string {
+  const words = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth'];
+  return words[n - 1] || `${n}th`;
+}
 
 // 从画布节点里挑一个缩略图 URL(图片优先,视频次之,用于 Dashboard 卡片)
 function pickThumbnail(nodes: Node[]): string | undefined {

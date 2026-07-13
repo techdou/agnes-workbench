@@ -2,8 +2,8 @@
 
 import { useFlowStore } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
-import { NodeShell, NodeTextarea, NodeLabel } from './NodeShell';
-import type { TextNodeData } from '@/lib/types';
+import { NodeShell, NodeTextarea, NodeLabel, selectClass, selectStyle } from './NodeShell';
+import type { TextNodeData, PromptTarget } from '@/lib/types';
 
 export function TextNode({ id, data }: { id: string; data: TextNodeData }) {
   const update = useFlowStore((s) => s.updateNodeData);
@@ -28,6 +28,26 @@ export function TextNode({ id, data }: { id: string; data: TextNodeData }) {
         placeholder={t('node.promptPlaceholder.text')}
         rows={4}
       />
+
+      {/* 扩写目标类型选择 */}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <NodeLabel>{t('node.targetType')}</NodeLabel>
+          <select
+            value={data.targetType || 'auto'}
+            onChange={(e) => update(id, { targetType: e.target.value as PromptTarget })}
+            className={selectClass}
+            style={selectStyle}
+          >
+            <option value="auto">{t('node.target.auto')}</option>
+            <option value="textToImage">{t('node.textToImage')}</option>
+            <option value="textToVideo">{t('node.textToVideo')}</option>
+            <option value="imageToImage">{t('node.imageToImage')}</option>
+            <option value="imageToVideo">{t('node.imageToVideo')}</option>
+          </select>
+        </div>
+      </div>
+
       <label
         className="flex cursor-pointer items-center gap-2 font-mono text-[10px] transition-colors"
         style={{ color: 'var(--c-text-dim)' }}

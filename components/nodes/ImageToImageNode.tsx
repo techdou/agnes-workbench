@@ -2,7 +2,8 @@
 
 import { useFlowStore } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
-import { NodeShell, NodeTextarea, NodeLabel, ResultThumb, selectClass, selectStyle } from './NodeShell';
+import { NodeShell, NodeLabel, ResultThumb, selectClass, selectStyle } from './NodeShell';
+import { NodeMentionInput } from '../NodeMentionInput';
 import type { ImageToImageData } from '@/lib/types';
 
 const SIZES = ['1024x768', '1024x1024', '768x1024'];
@@ -31,7 +32,8 @@ export function ImageToImageNode({ id, data }: { id: string; data: ImageToImageD
         ← {t('node.upstreamHint.imageMulti')}
       </div>
       <NodeLabel>{t('node.prompt')}</NodeLabel>
-      <NodeTextarea
+      <NodeMentionInput
+        nodeId={id}
         value={data.prompt || ''}
         onChange={(v) => update(id, { prompt: v })}
         placeholder={t('node.promptPlaceholder.text')}

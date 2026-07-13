@@ -4,7 +4,8 @@
 // multiImageVideo/keyframe)UI 90% 相同,用配置驱动消除重复
 import { useFlowStore } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
-import { NodeShell, NodeTextarea, NodeLabel } from './NodeShell';
+import { NodeShell, NodeLabel } from './NodeShell';
+import { NodeMentionInput } from '../NodeMentionInput';
 import { VideoParams, VideoProgress } from './VideoParams';
 import type { VideoNodeData } from '@/lib/types';
 
@@ -50,7 +51,8 @@ export function VideoNodeBase({ id, data, config }: VideoNodeBaseProps) {
         {t(config.upstreamHintKey)}
       </div>
       <NodeLabel>{config.promptLabel}</NodeLabel>
-      <NodeTextarea
+      <NodeMentionInput
+        nodeId={id}
         value={data.prompt || ''}
         onChange={(v) => update(id, { prompt: v })}
         placeholder={config.placeholder}
