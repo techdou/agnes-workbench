@@ -10,6 +10,7 @@ const CONFIG: VideoNodeConfig = {
   promptLabel: 'Motion',
   placeholder: '电影级镜头…',
   upstreamHintKey: 'node.upstreamHint.text',
+  allowImageRef: false, // 文生视频不接受图片参考
 };
 
 export function TextToVideoNode({ id, data }: { id: string; data: TextToVideoData }) {

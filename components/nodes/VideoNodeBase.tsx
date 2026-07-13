@@ -5,7 +5,7 @@
 import { useFlowStore } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
 import { NodeShell, NodeLabel } from './NodeShell';
-import { NodeMentionInput } from '../NodeMentionInput';
+import { NodeMentionInput } from '@/components/NodeMentionInput';
 import { VideoParams, VideoProgress } from './VideoParams';
 import type { VideoNodeData } from '@/lib/types';
 
@@ -17,6 +17,7 @@ export interface VideoNodeConfig {
   promptLabel: string;
   placeholder: string;
   upstreamHintKey: string;
+  allowImageRef?: boolean; // 是否允许 @图片引用(textToVideo=false, 其他默认 true)
 }
 
 interface VideoNodeBaseProps {
@@ -57,6 +58,7 @@ export function VideoNodeBase({ id, data, config }: VideoNodeBaseProps) {
         onChange={(v) => update(id, { prompt: v })}
         placeholder={config.placeholder}
         rows={2}
+        allowImageRef={config.allowImageRef !== false}
       />
       <VideoParams
         numFrames={data.numFrames ?? 121}

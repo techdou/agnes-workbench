@@ -27,6 +27,7 @@ import {
 } from './db';
 import { useSettings } from './settings';
 import { buildEnhanceSystemPrompt } from './prompt-templates';
+import { resolveTargetType, resolveImageRefs } from './prompt-resolve';
 
 // ---------- API 调用封装 ----------
 
@@ -577,7 +578,7 @@ async function executeNode(id: string): Promise<void> {
       if (d.enhance) {
         const targetType = resolveTargetType(d.targetType || 'auto', nodes, edges, id);
         const systemPrompt = buildEnhanceSystemPrompt(targetType);
-        const expanded = await callText(`${text}`, systemPrompt);
+        const expanded = await callText(text, systemPrompt);
         if (cancelled) return;
         updateNodeData(id, { text: expanded, status: 'done' });
         return;
@@ -707,65 +708,7 @@ async function executeNode(id: string): Promise<void> {
 
 // ---------- 辅助函数 ----------
 
-/**
- * 解析文本节点的扩写目标类型
- * auto 模式:查 edges 找下游节点类型
- */
-function resolveTargetType(
-  target: string,
-  nodes: Node[],
-  edges: Edge[],
-  nodeId: string
-): string {
-  if (target !== 'auto') return target;
-  // 查下游:当前节点的输出连到了哪些节点
-  const downstreamIds = edges.filter((e) => e.source === nodeId).map((e) => e.target);
-  for (const did of downstreamIds) {
-    const dn = nodes.find((n) => n.id === did);
-    if (dn?.type) return dn.type;
-  }
-  return 'auto'; // 没找到下游,用通用模板
-}
-
-/**
- * 解析 prompt 里的 {@节点id} 引用,返回引用的图片 URL 列表 + 替换后的 prompt
- * 安全:只允许引用通过 edges 连线到当前节点的上游节点
- */
-function resolveImageRefs(
-  prompt: string,
-  nodes: Node[],
-  edges: Edge[],
-  nodeId: string
-): { resolvedPrompt: string; referencedImages: string[] } {
-  const upstreamIds = new Set(edges.filter((e) => e.target === nodeId).map((e) => e.source));
-  const referencedImages: string[] = [];
-  let imageIdx = 0;
-
-  // 匹配 {@xxx} 格式的引用
-  const resolvedPrompt = prompt.replace(/\{@([^}]+)\}/g, (match, refId) => {
-    // 安全检查:只允许引用已连线的上游节点
-    if (!upstreamIds.has(refId)) return match;
-
-    const srcNode = nodes.find((n) => n.id === refId);
-    if (!srcNode) return match;
-
-    const d = srcNode.data as { resultUrl?: string; imageUrl?: string; cachedUrl?: string };
-    const imgUrl = d.resultUrl || d.imageUrl || d.cachedUrl;
-    if (!imgUrl) return match;
-
-    referencedImages.push(imgUrl);
-    imageIdx++;
-    // 替换成自然语言描述(API 看到的是文字,图片走 extra_body.image 数组)
-    return `the ${ordinal(imageIdx)} reference image`;
-  });
-
-  return { resolvedPrompt, referencedImages };
-}
-
-function ordinal(n: number): string {
-  const words = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth'];
-  return words[n - 1] || `${n}th`;
-}
+// resolveTargetType 和 resolveImageRefs 已提取到 lib/prompt-resolve.ts(便于单测)
 
 // 从画布节点里挑一个缩略图 URL(图片优先,视频次之,用于 Dashboard 卡片)
 function pickThumbnail(nodes: Node[]): string | undefined {

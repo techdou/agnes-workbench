@@ -3,7 +3,7 @@
 import { useFlowStore } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
 import { NodeShell, NodeLabel, ResultThumb, selectClass, selectStyle } from './NodeShell';
-import { NodeMentionInput } from '../NodeMentionInput';
+import { NodeMentionInput } from '@/components/NodeMentionInput';
 import type { ImageToImageData } from '@/lib/types';
 
 const SIZES = ['1024x768', '1024x1024', '768x1024'];

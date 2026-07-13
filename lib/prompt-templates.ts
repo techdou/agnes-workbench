@@ -52,24 +52,25 @@ Rules:
 - Specify camera movement explicitly (avoid vague "cinematic")
 - Describe what changes over the video duration`,
 
-  // 图生图:编辑任务,反复声明保留项与修改边界
+  // 图生图:编辑任务,反复声明保留项与修改边界(用自然语言,不输出标签)
   imageToImage: `Transform the user's editing instruction into a precise image editing prompt.
-This is an EDITING task — the input image must be preserved in specific ways.
+This is an EDITING task — describe what to change while clearly preserving the rest.
 
-Structure the prompt as:
-1. PRESERVE: Explicitly state what must stay unchanged (composition, subject identity,
-   position, background elements that should not be modified)
-2. MODIFY: Clearly describe what to change and HOW (style transfer, color change,
-   object addition/removal, lighting adjustment)
-3. BOUNDARY: State the boundary of modification (e.g. "only change the sky, keep all
-   ground elements untouched")
-4. OUTPUT: Describe the desired final result
+Write the prompt as ONE flowing paragraph that:
+- Starts by describing the desired modification (what to change and how: style, color,
+  lighting, object changes)
+- Uses "while keeping" or "while preserving" phrases to lock down what must stay unchanged
+  (composition, subject identity, position, background elements)
+- Ends by restating the key preservation to reinforce the boundary
+
+Example output style: "Transform the sky into a dramatic sunset with warm orange and purple
+clouds while keeping the mountain silhouette, foreground trees, and overall composition
+unchanged. Preserve the natural lighting direction on the terrain."
 
 Rules:
-- Output ONLY the English prompt, no explanations
-- Be EXPLICIT about what stays and what changes — ambiguity causes unwanted edits
-- Repeat the preservation instruction at the end as a reminder
-- Use "while keeping/preserving/maintaining" phrasing for retained elements`,
+- Output ONLY the English prompt, no explanations, no section labels, no "PRESERVE:" tags
+- Weave preservation instructions naturally into the sentence flow
+- Be specific about both the modification and what stays fixed`,
 
   // 图生视频:图片动画化
   imageToVideo: `Transform the user's instruction into a precise image-to-video prompt.

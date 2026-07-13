@@ -14,9 +14,10 @@ interface NodeMentionInputProps {
   onChange: (v: string) => void;
   placeholder?: string;
   rows?: number;
+  allowImageRef?: boolean; // 是否允许 @图片引用(默认 true;textToVideo 传 false)
 }
 
-export function NodeMentionInput({ nodeId, value, onChange, placeholder, rows = 3 }: NodeMentionInputProps) {
+export function NodeMentionInput({ nodeId, value, onChange, placeholder, rows = 3, allowImageRef = true }: NodeMentionInputProps) {
   const t = useTranslation();
   const nodes = useFlowStore((s) => s.nodes);
   const edges = useFlowStore((s) => s.edges);
@@ -75,6 +76,8 @@ export function NodeMentionInput({ nodeId, value, onChange, placeholder, rows = 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const newValue = e.target.value;
     onChange(newValue);
+    // 如果不允许 @图片引用(textToVideo),跳过 mention 逻辑
+    if (!allowImageRef) return;
     const textarea = e.target;
     const cursor = textarea.selectionStart;
     // 检测 @ 触发:光标前最近的 @,且 @ 后没有空格或换行
@@ -93,22 +96,28 @@ export function NodeMentionInput({ nodeId, value, onChange, placeholder, rows = 
     setMentionOpen(false);
   }
 
-  // 过滤上游节点(基于 @ 后输入的文字)
+  // 过滤上游节点(基于 @ 后输入的文字,不读 ref 避免并发渲染问题)
   const filteredUpstream = useMemo(() => {
     if (!mentionOpen) return [];
-    const textAfterAt = value.slice(mentionStart + 1, textareaRef.current?.selectionStart || value.length);
+    // handleChange 每次输入后,@ 后的文字就是 mentionStart+1 到 value 末尾
+    const textAfterAt = value.slice(mentionStart + 1);
     if (!textAfterAt) return upstreamNodes;
+    const q = textAfterAt.toLowerCase();
     return upstreamNodes.filter((n) => {
-      const sigil = NODE_SIGIL[n.type || ''] || '';
       const typeName = t(`node.${n.type}`).toLowerCase();
-      return n.type?.toLowerCase().includes(textAfterAt.toLowerCase()) ||
-             typeName.includes(textAfterAt.toLowerCase()) ||
+      return n.type?.toLowerCase().includes(q) ||
+             typeName.includes(q) ||
              n.id.includes(textAfterAt);
     });
   }, [mentionOpen, mentionStart, value, upstreamNodes, t]);
 
   return (
     <div className="relative">
+      {allowImageRef && upstreamNodes.length > 0 && (
+        <p className="mb-1 font-mono text-[8px] tracking-wider" style={{ color: 'var(--c-text-ghost)' }}>
+          {t('node.mentionHint')}
+        </p>
+      )}
       <textarea
         ref={textareaRef}
         value={value}
