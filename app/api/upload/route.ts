@@ -3,7 +3,7 @@
 // 这样上传图和生成图走同一套缓存代理,下游节点无感知
 
 import { NextRequest, NextResponse } from 'next/server';
-import { loadManifest, saveManifest, LIBRARY_DIR, assertSafeLocalPath } from '@/lib/cache';
+import { loadManifest, saveManifest, withManifestLock, LIBRARY_DIR, assertSafeLocalPath } from '@/lib/cache';
 import fs from 'fs/promises';
 import path from 'path';
 import { createHash } from 'crypto';
@@ -62,19 +62,21 @@ export async function POST(req: NextRequest) {
       await fs.writeFile(fullPath, buf);
     }
 
-    // 写入 cache manifest,让 /api/cache/[hash] 能找到这张图
-    const manifest = await loadManifest();
-    if (!manifest.entries[hash]) {
-      manifest.entries[hash] = {
-        hash,
-        originalUrl: `upload://${localPath}`, // 占位:上传图没有外部 URL
-        localPath,
-        type: 'image',
-        prompt: 'Uploaded image',
-        createdAt: new Date().toISOString(),
-      };
-      await saveManifest(manifest);
-    }
+    // [H4] 写入 cache manifest(走写锁,和 cache route 共享同一把锁防并发覆盖)
+    await withManifestLock(async () => {
+      const manifest = await loadManifest();
+      if (!manifest.entries[hash]) {
+        manifest.entries[hash] = {
+          hash,
+          originalUrl: `upload://${localPath}`,
+          localPath,
+          type: 'image',
+          prompt: 'Uploaded image',
+          createdAt: new Date().toISOString(),
+        };
+        await saveManifest(manifest);
+      }
+    });
 
     const localUrl = `/api/cache/${hash}`;
 

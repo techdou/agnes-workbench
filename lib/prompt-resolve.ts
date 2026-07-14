@@ -31,11 +31,17 @@ export function resolveTargetType(
   return 'auto';
 }
 
+// [H1] 视频类节点类型——@引用时跳过(它们的 resultUrl 是视频不是图片)
+const VIDEO_NODE_TYPES = new Set([
+  'textToVideo', 'imageToVideo', 'multiImageVideo', 'keyframe', 'videoPreview',
+]);
+
 /**
  * 解析 prompt 里的 {@节点id} 引用
  * 安全:只允许引用通过 edges 连线到当前节点的上游节点
  * 未解析的引用(无图/未连线)清理成空,不残留 {@xxx} 进 API prompt
  * 重复引用同一节点时去重
+ * [H1] 跳过视频节点(防御性,即使白名单挡住了也做类型校验)
  */
 export function resolveImageRefs(
   prompt: string,
@@ -53,6 +59,9 @@ export function resolveImageRefs(
 
     const srcNode = nodes.find((n) => n.id === refId);
     if (!srcNode) return '';
+
+    // [H1] 跳过视频节点(它们的 resultUrl 是视频,不能当参考图)
+    if (VIDEO_NODE_TYPES.has(srcNode.type || '')) return '';
 
     const d = srcNode.data as { resultUrl?: string; imageUrl?: string; cachedUrl?: string };
     const imgUrl = d.resultUrl || d.imageUrl || d.cachedUrl;

@@ -33,6 +33,8 @@ export interface CallContext {
   textModel?: string;
   imageModel?: string;
   videoModel?: string;
+  baseUrl?: string;        // [H2] 覆盖默认 API 地址
+  autoTranslate?: boolean; // [H3] 是否自动翻译中文 prompt
 }
 
 // ---------- 类型定义(替代 any) ----------
@@ -52,13 +54,15 @@ async function requestJson<T = AgnesJson>(
   path: string,
   payload?: Record<string, unknown>,
   apiKeyOverride?: string | null,
-  timeoutMs = 120000
+  timeoutMs = 120000,
+  baseUrlOverride?: string
 ): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const body = payload ? JSON.stringify(payload) : undefined;
-    const resp = await fetch(`${BASE_URL}${path}`, {
+    const baseUrl = baseUrlOverride || BASE_URL; // [H2] 支持自定义 Base URL
+    const resp = await fetch(`${baseUrl}${path}`, {
       method,
       headers: {
         Authorization: `Bearer ${resolveApiKey(apiKeyOverride)}`,
@@ -81,13 +85,15 @@ async function requestJson<T = AgnesJson>(
 
 // ---------- 中文 → 英文 prompt 翻译 ----------
 
-function needsTranslation(prompt: string): boolean {
+function needsTranslation(prompt: string, autoTranslate?: boolean): boolean {
+  // [H3] 如果设置面板关闭了自动翻译,直接返回 false
+  if (autoTranslate === false) return false;
   // 含非 ASCII 字符就翻
   return /[^\x00-\x7F]/.test(prompt);
 }
 
 export async function translatePromptToEnglish(prompt: string, ctx?: CallContext): Promise<string> {
-  if (!needsTranslation(prompt)) return prompt;
+  if (!needsTranslation(prompt, ctx?.autoTranslate)) return prompt;
   const data = await requestJson<ChatCompletionResponse>('POST', '/v1/chat/completions', {
     model: ctx?.textModel || DEFAULT_TEXT_MODEL,
     messages: [
@@ -102,7 +108,7 @@ export async function translatePromptToEnglish(prompt: string, ctx?: CallContext
     ],
     temperature: 0,
     max_tokens: 800,
-  }, ctx?.apiKey);
+  }, ctx?.apiKey, 120000, ctx?.baseUrl);
   const translated = data.choices?.[0]?.message?.content?.trim();
   if (!translated) throw new Error('翻译失败:返回为空');
   return translated;
@@ -128,7 +134,7 @@ export async function generateText(
     messages,
     temperature: opts?.temperature ?? 0.7,
     max_tokens: opts?.maxTokens ?? 1024,
-  }, ctx?.apiKey);
+  }, ctx?.apiKey, 120000, ctx?.baseUrl);
   return {
     content: data.choices?.[0]?.message?.content ?? '',
     raw: data,
@@ -168,7 +174,7 @@ export async function textToImage(prompt: string, size = '1024x768', ctx?: CallC
     prompt: englishPrompt,
     size,
     extra_body: { response_format: 'url' },
-  }, ctx?.apiKey);
+  }, ctx?.apiKey, 120000, ctx?.baseUrl);
   return { urls: extractImageUrls(data), raw: data };
 }
 
@@ -188,7 +194,7 @@ export async function imageToImage(
       image: inputImageUrls,
       response_format: 'url',
     },
-  }, ctx?.apiKey);
+  }, ctx?.apiKey, 120000, ctx?.baseUrl);
   return { urls: extractImageUrls(data), raw: data };
 }
 
@@ -276,7 +282,7 @@ async function createVideoTask(
     if (v != null) payload[k] = v;
   }
 
-  const data = await requestJson<AgnesJson>('POST', '/v1/videos', payload, ctx?.apiKey);
+  const data = await requestJson<AgnesJson>('POST', '/v1/videos', payload, ctx?.apiKey, 120000, ctx?.baseUrl);
   const { id, kind } = pickVideoId(data);
   return {
     videoId: kind === 'video_id' ? id : undefined,
@@ -368,7 +374,7 @@ export async function getVideoStatus(identifier: string, ctx?: CallContext): Pro
   } else {
     path = `/v1/videos/${encodeURIComponent(identifier)}`;
   }
-  const data = await requestJson<AgnesJson>('GET', path, undefined, ctx?.apiKey);
+  const data = await requestJson<AgnesJson>('GET', path, undefined, ctx?.apiKey, 120000, ctx?.baseUrl);
   return {
     status: String(data?.status ?? ''),
     progress: typeof data?.progress === 'number' ? data.progress : undefined,

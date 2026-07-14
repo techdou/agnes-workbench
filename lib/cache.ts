@@ -78,7 +78,7 @@ let manifestLock = Promise.resolve();
 /**
  * 串行化对 manifest 的读-改-写操作,避免并发覆盖
  */
-async function withManifestLock<T>(fn: () => Promise<T>): Promise<T> {
+export async function withManifestLock<T>(fn: () => Promise<T>): Promise<T> {
   const prev = manifestLock;
   let release!: () => void;
   manifestLock = new Promise<void>((r) => (release = r));
@@ -240,26 +240,52 @@ export async function listEntries(): Promise<ManifestEntry[]> {
 /**
  * 把同源 URL(/api/cache/xxx)转成 data URL(base64)
  * 让 Agnes API 能"看到"本地图片/上传图片(因为 Agnes 服务器无法访问 localhost)
+ * [C1] 只对图片转 base64,视频文件太大不转;加 10MB 上限防 OOM
  */
+const MAX_BASE64_SIZE = 10 * 1024 * 1024; // 10MB(base64 后约 13MB,安全)
+const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+const VIDEO_EXTS = new Set(['.mp4', '.webm', '.mov']);
+
 export async function resolveLocalImages(urls: string[]): Promise<string[]> {
   const result: string[] = [];
   for (const url of urls) {
     if (url.startsWith('/api/cache/')) {
       const hash = url.replace('/api/cache/', '');
+      // [M1] hash 格式校验,和 GET /api/cache/[hash] 一致
+      if (!/^[0-9a-f]{1,32}$/.test(hash)) {
+        result.push(url);
+        continue;
+      }
       try {
         const entry = await getEntryByHash(hash);
-        if (entry) {
-          const fullPath = path.join(LIBRARY_DIR, entry.localPath);
-          const buf = await fs.readFile(fullPath);
-          const ext = path.extname(entry.localPath).toLowerCase();
-          const mime = ext === '.png' ? 'image/png'
-            : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
-            : ext === '.webp' ? 'image/webp'
-            : ext === '.gif' ? 'image/gif' : 'image/png';
-          result.push(`data:${mime};base64,${buf.toString('base64')}`);
-        } else {
+        if (!entry) { result.push(url); continue; }
+
+        const ext = path.extname(entry.localPath).toLowerCase();
+        // [C1] 视频文件不转 base64(太大,且 Agnes 参考图不需要视频)
+        if (VIDEO_EXTS.has(ext)) {
           result.push(url);
+          continue;
         }
+        // 只转图片格式
+        if (!IMAGE_EXTS.has(ext)) {
+          result.push(url);
+          continue;
+        }
+
+        const fullPath = path.join(LIBRARY_DIR, entry.localPath);
+        const stat = await fs.stat(fullPath);
+        // [C1] 大小上限,防 OOM
+        if (stat.size > MAX_BASE64_SIZE) {
+          result.push(url);
+          continue;
+        }
+
+        const buf = await fs.readFile(fullPath);
+        const mime = ext === '.png' ? 'image/png'
+          : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
+          : ext === '.webp' ? 'image/webp'
+          : ext === '.gif' ? 'image/gif' : 'image/png';
+        result.push(`data:${mime};base64,${buf.toString('base64')}`);
       } catch {
         result.push(url);
       }

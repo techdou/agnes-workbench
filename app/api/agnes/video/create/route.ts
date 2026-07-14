@@ -15,12 +15,12 @@ export async function POST(req: NextRequest) {
     const {
       mode, prompt, imageUrl, imageUrls,
       width, height, numFrames, frameRate, seed, negativePrompt,
-      videoModel,
+      videoModel, baseUrl, autoTranslate,
     } = body;
 
     if (!prompt) return NextResponse.json({ error: 'prompt 必填' }, { status: 400 });
 
-    const ctx: CallContext = { apiKey, videoModel };
+    const ctx: CallContext = { apiKey, videoModel, baseUrl, autoTranslate };
     const opts = { width, height, numFrames, frameRate, seed, negativePrompt };
     let result;
 

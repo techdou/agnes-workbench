@@ -7,10 +7,10 @@ export async function POST(req: NextRequest) {
   try {
     const apiKey = req.headers.get('X-Agnes-Key');
     const body = await req.json();
-    const { mode, prompt, size, inputImageUrls, imageModel } = body;
+    const { mode, prompt, size, inputImageUrls, imageModel, baseUrl, autoTranslate } = body;
     if (!prompt) return NextResponse.json({ error: 'prompt 必填' }, { status: 400 });
 
-    const ctx: CallContext = { apiKey, imageModel };
+    const ctx: CallContext = { apiKey, imageModel, baseUrl, autoTranslate };
 
     let result;
     if (mode === 'image-to-image') {

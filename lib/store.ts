@@ -39,13 +39,15 @@ function authHeaders(): Record<string, string> {
   return headers;
 }
 
-// 读 settings 里的模型名(透传给 API route,空值不传用服务端默认)
-function modelParams(): Record<string, string> {
+// 读 settings 里的模型名+baseUrl+autoTranslate(透传给 API route)
+function modelParams(): Record<string, unknown> {
   const s = useSettings.getState().settings;
-  const params: Record<string, string> = {};
+  const params: Record<string, unknown> = {};
   if (s.textModel) params.textModel = s.textModel;
   if (s.imageModel) params.imageModel = s.imageModel;
   if (s.videoModel) params.videoModel = s.videoModel;
+  if (s.baseUrl) params.baseUrl = s.baseUrl;           // [H2]
+  params.autoTranslate = s.autoTranslate;               // [H3]
   return params;
 }
 
@@ -97,8 +99,10 @@ async function callVideoCreate(body: Record<string, unknown>): Promise<{ videoId
 
 async function callVideoStatus(id: string): Promise<{ status: string; progress?: number; url?: string; error?: string }> {
   const s = useSettings.getState().settings;
-  const modelQ = s.videoModel ? `&videoModel=${encodeURIComponent(s.videoModel)}` : '';
-  const resp = await fetch(`/api/agnes/video/status?id=${encodeURIComponent(id)}${modelQ}`, {
+  const params = new URLSearchParams({ id });
+  if (s.videoModel) params.set('videoModel', s.videoModel);
+  if (s.baseUrl) params.set('baseUrl', s.baseUrl);
+  const resp = await fetch(`/api/agnes/video/status?${params}`, {
     headers: authHeaders(),
   });
   if (!resp.ok) {
@@ -461,10 +465,19 @@ export const useFlowStore = create<FlowState>()(
   loadProject: async (id) => {
     const project = await getProject(id);
     if (!project) return false;
+    // [M4] 加载项目时重置所有 running 状态为 idle
+    // (视频生成中刷新页面后,轮询已断,节点不该卡在 running)
+    const nodes = (project.nodes || []).map((n) => {
+      const d = n.data as { status?: string };
+      if (d.status === 'running') {
+        return { ...n, data: { ...n.data, status: 'idle' as const } };
+      }
+      return n;
+    });
     set({
       currentProjectId: id,
       currentProjectName: project.name,
-      nodes: project.nodes || [],
+      nodes,
       edges: project.edges || [],
       saveStatus: 'saved',
     });
@@ -639,6 +652,8 @@ async function executeNode(id: string): Promise<void> {
 
       let createBody: Record<string, unknown>;
       if (nodeType === 'textToVideo') {
+        // [M3] 清理可能残留的 {@xxx} 标记(UI 不允许 @图片,但用户可能手敲)
+        prompt = prompt.replace(/\{@[\w_]+\}/g, '').trim();
         createBody = { mode: 'text', prompt, ...common };
       } else if (nodeType === 'imageToVideo') {
         // @引用:如果有 {@节点id},用引用的图;否则取第一张上游图
