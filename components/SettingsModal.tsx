@@ -121,9 +121,12 @@ function ApiTab({ settings, update, t }: TabProps) {
   async function testConnection() {
     setTestStatus('testing');
     try {
+      // [Bug2] 必须传 X-Agnes-Key 头,否则 API route 收不到 settings 里填的 key
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (settings.apiKey) headers['X-Agnes-Key'] = settings.apiKey;
       const resp = await fetch('/api/agnes/text', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ prompt: 'test', maxTokens: 1 }),
       });
       // 只要不是网络错误就算连通(401 也说明地址通)

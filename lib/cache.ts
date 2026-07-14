@@ -237,5 +237,38 @@ export async function listEntries(): Promise<ManifestEntry[]> {
   );
 }
 
+/**
+ * 把同源 URL(/api/cache/xxx)转成 data URL(base64)
+ * 让 Agnes API 能"看到"本地图片/上传图片(因为 Agnes 服务器无法访问 localhost)
+ */
+export async function resolveLocalImages(urls: string[]): Promise<string[]> {
+  const result: string[] = [];
+  for (const url of urls) {
+    if (url.startsWith('/api/cache/')) {
+      const hash = url.replace('/api/cache/', '');
+      try {
+        const entry = await getEntryByHash(hash);
+        if (entry) {
+          const fullPath = path.join(LIBRARY_DIR, entry.localPath);
+          const buf = await fs.readFile(fullPath);
+          const ext = path.extname(entry.localPath).toLowerCase();
+          const mime = ext === '.png' ? 'image/png'
+            : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
+            : ext === '.webp' ? 'image/webp'
+            : ext === '.gif' ? 'image/gif' : 'image/png';
+          result.push(`data:${mime};base64,${buf.toString('base64')}`);
+        } else {
+          result.push(url);
+        }
+      } catch {
+        result.push(url);
+      }
+    } else {
+      result.push(url);
+    }
+  }
+  return result;
+}
+
 // 导出供路由层使用
 export { LIBRARY_DIR, assertSafeLocalPath };
