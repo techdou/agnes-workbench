@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    const statusCode = (e as { statusCode?: number }).statusCode || 500;
+    return NextResponse.json({ error: msg }, { status: statusCode });
   }
 }

@@ -20,7 +20,6 @@ export async function POST(req: NextRequest) {
       if (urls.length === 0) {
         return NextResponse.json({ error: '图生图至少需要一张参考图(inputImageUrls)' }, { status: 400 });
       }
-      // [Bug1] 同源 URL(/api/cache/xxx)转 data URL,让 Agnes 能访问本地上传的图片
       urls = await resolveLocalImages(urls);
       result = await imageToImage(prompt, urls, size || '1024x768', ctx);
     } else {
@@ -29,6 +28,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    // 透传 Agnes 的 HTTP 状态码(503 队列满不该包成 500)
+    const statusCode = (e as { statusCode?: number }).statusCode || 500;
+    return NextResponse.json({ error: msg }, { status: statusCode });
   }
 }

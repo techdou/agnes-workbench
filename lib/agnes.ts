@@ -78,7 +78,18 @@ async function requestJson<T = AgnesJson>(
     });
     const text = await resp.text();
     if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status}: ${text}`);
+      // 提取 Agnes 返回的友好错误信息(不是整段 JSON)
+      let friendlyMsg = `HTTP ${resp.status}`;
+      try {
+        const errJson = JSON.parse(text);
+        if (errJson?.error?.message) friendlyMsg = errJson.error.message;
+      } catch {
+        if (text) friendlyMsg += `: ${text.slice(0, 200)}`;
+      }
+      // 用自定义 Error 保留状态码,让 route 层能透传(503 不该包成 500)
+      const err = new Error(friendlyMsg) as Error & { statusCode?: number };
+      err.statusCode = resp.status;
+      throw err;
     }
     return (text ? JSON.parse(text) : {}) as T;
   } finally {

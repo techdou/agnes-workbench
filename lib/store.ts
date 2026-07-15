@@ -51,6 +51,14 @@ function modelParams(): Record<string, unknown> {
   return params;
 }
 
+// 友好化 API 错误:503/429 等限流错误给中文提示
+function friendlyApiError(status: number, msg: string): string {
+  if (status === 503) return '服务繁忙,请稍后重试';
+  if (status === 429) return '请求过于频繁,请稍后重试';
+  if (status === 401) return 'API Key 无效,请检查设置';
+  return msg;
+}
+
 async function callImage(
   mode: 'text-to-image' | 'image-to-image',
   prompt: string,
@@ -64,7 +72,7 @@ async function callImage(
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${resp.status}`);
+    throw new Error(friendlyApiError(resp.status, err.error || `HTTP ${resp.status}`));
   }
   return resp.json();
 }
@@ -77,7 +85,7 @@ async function callText(prompt: string, system?: string): Promise<string> {
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${resp.status}`);
+    throw new Error(friendlyApiError(resp.status, err.error || `HTTP ${resp.status}`));
   }
   const r = await resp.json();
   if (!r.content) throw new Error('文本 API 未返回内容');
@@ -92,7 +100,7 @@ async function callVideoCreate(body: Record<string, unknown>): Promise<{ videoId
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${resp.status}`);
+    throw new Error(friendlyApiError(resp.status, err.error || `HTTP ${resp.status}`));
   }
   return resp.json();
 }
@@ -107,7 +115,7 @@ async function callVideoStatus(id: string): Promise<{ status: string; progress?:
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${resp.status}`);
+    throw new Error(friendlyApiError(resp.status, err.error || `HTTP ${resp.status}`));
   }
   return resp.json();
 }
