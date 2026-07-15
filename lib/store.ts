@@ -31,12 +31,9 @@ import { resolveTargetType, resolveImageRefs } from './prompt-resolve';
 
 // ---------- API 调用封装 ----------
 
-// 统一构建请求头:注入 settings 里的 API Key(可选覆盖 .env)
+// 统一构建请求头(API Key 现在从服务端 DB 读取,不再前端传)
 function authHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const apiKey = useSettings.getState().settings.apiKey;
-  if (apiKey) headers['X-Agnes-Key'] = apiKey;
-  return headers;
+  return { 'Content-Type': 'application/json' };
 }
 
 // 读 settings 里的模型名+baseUrl+autoTranslate(透传给 API route)
@@ -449,19 +446,11 @@ export const useFlowStore = create<FlowState>()(
   // ---------- 项目制 ----------
 
   createProject: async (name) => {
-    const id = genId('proj');
-    const now = new Date().toISOString();
-    const project: Project = {
-      id,
-      name,
-      nodes: [],
-      edges: [],
-      createdAt: now,
-      updatedAt: now,
-    };
-    await saveProject(project);
+    // 服务端创建项目,拿回 server 生成的 ID
+    const { createProject: apiCreateProject } = await import('./db');
+    const project = await apiCreateProject(name);
     set({
-      currentProjectId: id,
+      currentProjectId: project.id,
       currentProjectName: name,
       nodes: [],
       edges: [],
@@ -469,7 +458,7 @@ export const useFlowStore = create<FlowState>()(
     });
     // [C1] 切换项目必须清空 undo 历史,否则 Ctrl+Z 会跨项目污染
     useFlowStore.temporal.getState().clear();
-    return id;
+    return project.id;
   },
 
   loadProject: async (id) => {
@@ -499,8 +488,6 @@ export const useFlowStore = create<FlowState>()(
   persistCurrentProject: async () => {
     const { currentProjectId, currentProjectName, nodes, edges } = get();
     if (!currentProjectId) return;
-    // 先读现有项目(保留 createdAt),再更新
-    const existing = await getProject(currentProjectId);
     // 缩略图:取画布里第一张生成结果的 cachedUrl(图片优先,视频次之)
     // 不用 html-to-image 那种重依赖,用内容本身的缩略图更直观
     const thumbnail = pickThumbnail(nodes);
@@ -509,8 +496,8 @@ export const useFlowStore = create<FlowState>()(
       name: currentProjectName,
       nodes,
       edges,
-      thumbnail: thumbnail || existing?.thumbnail,
-      createdAt: existing?.createdAt || new Date().toISOString(),
+      thumbnail,
+      createdAt: new Date().toISOString(), // PUT 不用这个,但类型需要
       updatedAt: new Date().toISOString(),
     };
     await saveProject(project);

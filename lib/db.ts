@@ -1,65 +1,74 @@
-// IndexedDB 存储层 —— 项目数据 + 缓存的持久化
-// 两个独立数据库(避免 idb-keyval 共享 DB 时的 schema 竞争):
-//   - phosphor-projects:每个项目(画布)的完整数据,key = projectId
-//   - phosphor-settings:全局设置(单一对象,key = 'app-settings')
+// 数据访问层 —— 从 IndexedDB 迁移到服务端 API
+// 接口签名与原 IndexedDB 版本保持一致,store.ts 改动最小
+//
+// 所有请求携带 cookie(Auth.js session),服务端按 userId 隔离
 
-import { get, set, del, keys, createStore } from 'idb-keyval';
 import type { Edge, Node } from '@xyflow/react';
 
-// ---------- 数据结构 ----------
+// ---------- 数据结构(与 DB model 对齐) ----------
 
 export interface Project {
   id: string;
   name: string;
   nodes: Node[];
   edges: Edge[];
-  thumbnail?: string; // 画布截图 dataURL(Dashboard 缩略图)
+  thumbnail?: string;
   createdAt: string;
   updatedAt: string;
 }
 
-// ---------- IndexedDB stores(各自独立 DB,避免 schema 竞争) ----------
-
-const projectsStore = createStore('phosphor-projects', 'kv');
-const settingsStore = createStore('phosphor-settings', 'kv');
-
-// ---------- 项目 CRUD ----------
+// ---------- 项目 CRUD(走 /api/projects) ----------
 
 export async function getAllProjects(): Promise<Project[]> {
-  const allKeys = await keys(projectsStore);
-  const projects: Project[] = [];
-  for (const k of allKeys) {
-    const p = await get(k, projectsStore);
-    if (p) projects.push(p as Project);
-  }
-  // 按 updatedAt 倒序(最近编辑在前)
-  projects.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  return projects;
+  const resp = await fetch('/api/projects', { cache: 'no-store' });
+  if (!resp.ok) throw new Error(`加载项目列表失败: ${resp.status}`);
+  const data = await resp.json();
+  // 列表 API 不返回 nodes/edges(太重),补上空数组保持类型一致
+  return (data.projects as Project[]).map((p) => ({
+    ...p,
+    nodes: [],
+    edges: [],
+  }));
 }
 
 export async function getProject(id: string): Promise<Project | undefined> {
-  return get(id, projectsStore) as Promise<Project | undefined>;
+  const resp = await fetch(`/api/projects/${id}`, { cache: 'no-store' });
+  if (!resp.ok) {
+    if (resp.status === 404) return undefined;
+    throw new Error(`加载项目失败: ${resp.status}`);
+  }
+  const data = await resp.json();
+  return data.project as Project;
 }
 
 export async function saveProject(project: Project): Promise<void> {
-  await set(project.id, project, projectsStore);
+  const resp = await fetch(`/api/projects/${project.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: project.name,
+      nodes: project.nodes,
+      edges: project.edges,
+      thumbnail: project.thumbnail,
+    }),
+  });
+  if (!resp.ok) throw new Error(`保存项目失败: ${resp.status}`);
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  await del(id, projectsStore);
+  const resp = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+  if (!resp.ok) throw new Error(`删除项目失败: ${resp.status}`);
 }
 
-// ---------- 设置 ----------
+// ---------- 创建项目(返回 server 生成的 id) ----------
 
-const SETTINGS_KEY = 'app-settings';
-
-export async function loadSettings<T>(): Promise<T | undefined> {
-  return get(SETTINGS_KEY, settingsStore) as Promise<T | undefined>;
+export async function createProject(name: string): Promise<Project> {
+  const resp = await fetch('/api/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!resp.ok) throw new Error(`创建项目失败: ${resp.status}`);
+  const data = await resp.json();
+  return data.project as Project;
 }
-
-export async function saveSettings<T>(settings: T): Promise<void> {
-  await set(SETTINGS_KEY, settings, settingsStore);
-}
-
-// 导出 store 实例(给 zustand persist 的自定义 storage 用)
-export { projectsStore, settingsStore, SETTINGS_KEY };
