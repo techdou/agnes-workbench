@@ -135,10 +135,13 @@ function ApiTab({ settings, update, t }: TabProps) {
         headers,
         body: JSON.stringify(body),
       });
-      if (resp.ok || resp.status === 401) {
+      // 200 = 完全正常
+      // 401 = key 无效但地址通了(能收到 Agnes 的鉴权响应)
+      // 429 = 限流(RPM 超限),但说明地址+key 能连通
+      // 503 = 服务端队列满/过载,但说明地址+key 能连通(只是暂时忙)
+      if (resp.ok || resp.status === 401 || resp.status === 429 || resp.status === 503) {
         setTestStatus('ok');
       } else {
-        // 显示具体错误,方便排查
         const err = await resp.json().catch(() => ({}));
         setTestStatus('fail');
         setTestError(err.error || `HTTP ${resp.status}`);
