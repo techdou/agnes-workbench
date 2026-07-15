@@ -1,0 +1,65 @@
+// Phosphor Studio — 多用户数据模型
+// User(使用者/管理者) → Project(画布) → MediaAsset(生成的图片视频)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  password    String // bcrypt hash
+  name        String?
+  role        Role     @default(USER)
+  agnesKeyEnc String? // AES-256-GCM 加密后的 Agnes API Key
+  settings    Json     @default("{}") // 服务端持久设置(模型名/生成参数)
+  disabled    Boolean  @default(false) // 管理员禁用账号
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projects    Project[]
+  mediaAssets MediaAsset[]
+
+  @@index([email])
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  nodes     Json     @default("[]") // React Flow Node[]
+  edges     Json     @default("[]") // React Flow Edge[]
+  thumbnail String? // 画布缩略图 dataURL
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([updatedAt])
+}
+
+model MediaAsset {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId    String?
+  hash         String   @unique // sha1(url)[:16],文件去重 + 快速查找
+  originalUrl  String // Agnes 返回的外部 URL
+  localPath    String // 相对 library 目录的路径,如 images/abc.png
+  type         String // 'image' | 'video'
+  prompt       String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([hash])
+}
