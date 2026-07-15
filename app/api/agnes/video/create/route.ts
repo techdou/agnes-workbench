@@ -1,4 +1,4 @@
-// 视频任务创建代理
+// 视频任务创建代理(需登录,API Key 从用户 DB 记录读取)
 import { NextRequest, NextResponse } from 'next/server';
 import {
   createTextToVideo,
@@ -7,10 +7,15 @@ import {
   type CallContext,
 } from '@/lib/agnes';
 import { resolveLocalImages } from '@/lib/cache';
+import { getUserApiKey } from '@/lib/user-key';
 
 export async function POST(req: NextRequest) {
   try {
-    const apiKey = req.headers.get('X-Agnes-Key');
+    const apiKey = await getUserApiKey();
+    if (!apiKey) {
+      return NextResponse.json({ error: '请先登录并配置 API Key' }, { status: 401 });
+    }
+
     const body = await req.json();
     const {
       mode, prompt, imageUrl, imageUrls,
@@ -30,14 +35,12 @@ export async function POST(req: NextRequest) {
       if (!imageUrl) {
         return NextResponse.json({ error: '图生视频需要 imageUrl' }, { status: 400 });
       }
-      // [Bug1] 同源 URL 转 data URL
       const [resolvedImg] = await resolveLocalImages([imageUrl]);
       result = await createImageToVideo(prompt, resolvedImg, opts, ctx);
     } else if (mode === 'multi' || mode === 'keyframe') {
       if (!Array.isArray(imageUrls) || imageUrls.length === 0) {
         return NextResponse.json({ error: '多图/关键帧需要 imageUrls 数组' }, { status: 400 });
       }
-      // [Bug1] 同源 URL 转 data URL
       const resolvedImgs = await resolveLocalImages(imageUrls);
       const useKeyframes = mode === 'keyframe' || resolvedImgs.length >= 2;
       result = await createMultiImageVideo(

@@ -1,11 +1,17 @@
 // 图像生成代理(文生图 + 图生图,图生图支持多图参考)
+// 需登录,API Key 从用户 DB 记录读取
 import { NextRequest, NextResponse } from 'next/server';
 import { textToImage, imageToImage, type CallContext } from '@/lib/agnes';
 import { resolveLocalImages } from '@/lib/cache';
+import { getUserApiKey } from '@/lib/user-key';
 
 export async function POST(req: NextRequest) {
   try {
-    const apiKey = req.headers.get('X-Agnes-Key');
+    const apiKey = await getUserApiKey();
+    if (!apiKey) {
+      return NextResponse.json({ error: '请先登录并配置 API Key' }, { status: 401 });
+    }
+
     const body = await req.json();
     const { mode, prompt, size, inputImageUrls, imageModel, baseUrl, autoTranslate } = body;
     if (!prompt) return NextResponse.json({ error: 'prompt 必填' }, { status: 400 });

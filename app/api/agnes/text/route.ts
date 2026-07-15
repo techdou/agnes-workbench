@@ -1,14 +1,20 @@
-// 文本生成代理
+// 文本生成代理(需登录,API Key 从用户 DB 记录读取)
 import { NextRequest, NextResponse } from 'next/server';
 import { generateText, type CallContext } from '@/lib/agnes';
+import { getUserApiKey } from '@/lib/user-key';
 
 export async function POST(req: NextRequest) {
   try {
+    const apiKey = await getUserApiKey();
+    if (!apiKey) {
+      return NextResponse.json({ error: '请先登录并配置 API Key' }, { status: 401 });
+    }
+
     const body = await req.json();
     const { prompt, system, temperature, maxTokens, textModel, baseUrl, autoTranslate } = body;
     if (!prompt) return NextResponse.json({ error: 'prompt 必填' }, { status: 400 });
     const ctx: CallContext = {
-      apiKey: req.headers.get('X-Agnes-Key'),
+      apiKey,
       textModel,
       baseUrl,
       autoTranslate,
