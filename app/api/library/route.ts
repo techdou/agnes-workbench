@@ -1,10 +1,12 @@
-// 作品库列表
-import { NextResponse } from 'next/server';
+// 画廊列表(按项目隔离)
+import { NextRequest, NextResponse } from 'next/server';
 import { listEntries } from '@/lib/cache';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const entries = await listEntries();
+    const { searchParams } = new URL(req.url);
+    const projectId = searchParams.get('projectId') || undefined;
+    const entries = await listEntries(projectId);
     return NextResponse.json({ entries });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

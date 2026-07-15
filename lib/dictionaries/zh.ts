@@ -39,7 +39,7 @@ const zh = {
   'toolbar.clearConfirm': '清空整个画布?',
   'toolbar.addNode': '添加节点',
   'toolbar.export': '导出工作流',
-  'toolbar.archive': '作品归档',
+  'toolbar.archive': '画廊',
   'toolbar.archiveCount': '个作品',
 
   // 节点类型名
@@ -152,9 +152,9 @@ const zh = {
   'toast.videoTimeout': '视频生成超时',
 
   // 归档面板
-  'archive.title': '作品归档',
-  'archive.empty': '归档为空',
-  'archive.emptyDesc': '生成作品后会自动归档',
+  'archive.title': '画廊',
+  'archive.empty': '画廊为空',
+  'archive.emptyDesc': '生成作品后会自动进入画廊',
   'archive.loadFailed': '加载失败',
   'archive.retry': '重试',
   'archive.noPrompt': '(无提示词)',

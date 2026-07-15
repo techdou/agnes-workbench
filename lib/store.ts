@@ -114,10 +114,12 @@ async function callVideoStatus(id: string): Promise<{ status: string; progress?:
 
 async function cacheUrl(url: string, type: 'image' | 'video', prompt?: string): Promise<string> {
   try {
+    // 读取当前项目 ID,让画廊按项目隔离
+    const projectId = useFlowStore.getState().currentProjectId || undefined;
     const resp = await fetch('/api/cache/item', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, type, prompt }),
+      body: JSON.stringify({ url, type, prompt, projectId }),
     });
     if (resp.ok) {
       const data = await resp.json();

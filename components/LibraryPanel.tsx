@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useFlowStore } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
 
 interface Entry {
@@ -22,7 +23,10 @@ export function LibraryPanel() {
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetch('/api/library');
+      // 按当前项目拉取画廊
+      const projectId = useFlowStore.getState().currentProjectId;
+      const q = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
+      const resp = await fetch(`/api/library${q}`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
       setEntries(data.entries || []);
@@ -116,6 +120,8 @@ export function LibraryPanel() {
                     key={e.hash}
                     href={`/api/cache/${e.hash}`}
                     download
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="group relative overflow-hidden rounded border transition-all"
                     style={{ borderColor: 'var(--c-edge)', background: 'var(--c-ink)' }}
                   >

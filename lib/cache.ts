@@ -99,6 +99,7 @@ export interface ManifestEntry {
   type: 'image' | 'video';
   prompt?: string;
   createdAt: string;
+  projectId?: string; // 归属项目(画廊按项目隔离)
 }
 
 export interface Manifest {
@@ -148,12 +149,13 @@ export interface CacheResult {
 export async function cacheExternalUrl(
   url: string,
   type: 'image' | 'video',
-  prompt?: string
+  prompt?: string,
+  projectId?: string
 ): Promise<CacheResult> {
   const key = `${type}:${url}`;
   const existing = inFlight.get(key);
   if (existing) return existing;
-  const p = doCache(url, type, prompt).finally(() => inFlight.delete(key));
+  const p = doCache(url, type, prompt, projectId).finally(() => inFlight.delete(key));
   inFlight.set(key, p);
   return p;
 }
@@ -162,7 +164,8 @@ export async function cacheExternalUrl(
 async function doCache(
   url: string,
   type: 'image' | 'video',
-  prompt?: string
+  prompt?: string,
+  projectId?: string
 ): Promise<CacheResult> {
   // [S1] SSRF 校验:下载前先验域名
   assertSafeUrl(url);
@@ -216,6 +219,7 @@ async function doCache(
       type,
       prompt,
       createdAt: new Date().toISOString(),
+      projectId,
     };
     await saveManifest(fresh);
 
@@ -229,10 +233,14 @@ export async function getEntryByHash(hash: string): Promise<ManifestEntry | unde
   return manifest.entries[hash];
 }
 
-// 列出所有条目(按时间倒序)
-export async function listEntries(): Promise<ManifestEntry[]> {
+// 列出条目(按时间倒序,可按 projectId 过滤)
+export async function listEntries(projectId?: string): Promise<ManifestEntry[]> {
   const manifest = await loadManifest();
-  return Object.values(manifest.entries).sort(
+  let entries = Object.values(manifest.entries);
+  if (projectId) {
+    entries = entries.filter((e) => e.projectId === projectId);
+  }
+  return entries.sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 }

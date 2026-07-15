@@ -13,6 +13,8 @@ function DownloadButton({ url, filename, t }: { url: string; filename: string; t
     <a
       href={url}
       download={filename}
+      target="_blank"
+      rel="noopener noreferrer"
       className="mt-2 flex items-center justify-center gap-1.5 rounded border px-3 py-1.5 font-mono text-[10px] tracking-[0.15em] transition-all"
       style={{
         borderColor: 'color-mix(in srgb, var(--c-phosphor) 40%, transparent)',

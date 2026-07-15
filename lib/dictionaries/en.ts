@@ -39,7 +39,7 @@ const en = {
   'toolbar.clearConfirm': 'Clear the entire canvas?',
   'toolbar.addNode': 'Add Node',
   'toolbar.export': 'Export Workflow',
-  'toolbar.archive': 'Archive',
+  'toolbar.archive': 'Gallery',
   'toolbar.archiveCount': 'items',
 
   // Node types
@@ -152,8 +152,8 @@ const en = {
   'toast.videoTimeout': 'Video generation timed out',
 
   // Archive panel
-  'archive.title': 'Archive',
-  'archive.empty': 'ARCHIVE EMPTY',
+  'archive.title': 'Gallery',
+  'archive.empty': 'GALLERY EMPTY',
   'archive.emptyDesc': 'Generated works will appear here',
   'archive.loadFailed': 'Load failed',
   'archive.retry': 'Retry',
