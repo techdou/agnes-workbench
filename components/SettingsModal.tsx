@@ -117,22 +117,35 @@ type TabProps = {
 
 function ApiTab({ settings, update, t }: TabProps) {
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
+  const [testError, setTestError] = useState<string | null>(null);
 
   async function testConnection() {
     setTestStatus('testing');
+    setTestError(null);
     try {
-      // [Bug2] 必须传 X-Agnes-Key 头,否则 API route 收不到 settings 里填的 key
+      // 和生图用完全一样的参数构造方式(authHeaders + modelParams)
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (settings.apiKey) headers['X-Agnes-Key'] = settings.apiKey;
+      // 必须传 baseUrl + textModel,和生图链路一致,否则用户在设置里填的 Base URL 不生效
+      const body: Record<string, unknown> = { prompt: 'Hi', maxTokens: 5 };
+      if (settings.baseUrl) body.baseUrl = settings.baseUrl;
+      if (settings.textModel) body.textModel = settings.textModel;
       const resp = await fetch('/api/agnes/text', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ prompt: 'test', maxTokens: 1 }),
+        body: JSON.stringify(body),
       });
-      // 只要不是网络错误就算连通(401 也说明地址通)
-      setTestStatus(resp.ok || resp.status === 401 ? 'ok' : 'fail');
-    } catch {
+      if (resp.ok || resp.status === 401) {
+        setTestStatus('ok');
+      } else {
+        // 显示具体错误,方便排查
+        const err = await resp.json().catch(() => ({}));
+        setTestStatus('fail');
+        setTestError(err.error || `HTTP ${resp.status}`);
+      }
+    } catch (e: unknown) {
       setTestStatus('fail');
+      setTestError(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -172,7 +185,14 @@ function ApiTab({ settings, update, t }: TabProps) {
         <span className="ml-3 font-mono text-[11px]" style={{ color: 'var(--c-phosphor)' }}>✓ {t('settings.api.testOk')}</span>
       )}
       {testStatus === 'fail' && (
-        <span className="ml-3 font-mono text-[11px]" style={{ color: 'var(--c-rust)' }}>✕ {t('settings.api.testFail')}</span>
+        <div className="ml-3">
+          <span className="font-mono text-[11px]" style={{ color: 'var(--c-rust)' }}>✕ {t('settings.api.testFail')}</span>
+          {testError && (
+            <p className="mt-1 max-w-xs font-mono text-[9px] leading-relaxed" style={{ color: 'var(--c-text-ghost)' }}>
+              {testError}
+            </p>
+          )}
+        </div>
       )}
     </div>
   );

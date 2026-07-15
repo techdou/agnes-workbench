@@ -61,7 +61,10 @@ async function requestJson<T = AgnesJson>(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const body = payload ? JSON.stringify(payload) : undefined;
-    const baseUrl = baseUrlOverride || BASE_URL; // [H2] 支持自定义 Base URL
+    // [H2] Base URL 容错:用户可能填了末尾 / 或 /v1,统一处理避免 /v1/v1/ 重复
+    let baseUrl = baseUrlOverride || BASE_URL;
+    if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+    if (baseUrl.endsWith('/v1')) baseUrl = baseUrl.slice(0, -3);
     const resp = await fetch(`${baseUrl}${path}`, {
       method,
       headers: {
