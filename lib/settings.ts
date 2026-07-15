@@ -1,43 +1,46 @@
-// 全局设置 store —— API Key、语言、生成默认值、外观偏好
-// 持久化到 IndexedDB(通过 idb-keyval),容量充足
-// 语言相关导出给 i18n.ts 用,避免循环依赖
+// 设置 store —— 拆分服务端持久 + 客户端持久
+//
+// 服务端持久(模型名/生成参数/baseUrl):存 DB User.settings 字段,走 /api/settings
+// 客户端持久(theme/animations/language):存 localStorage,首屏防闪烁脚本不变
+// API Key 走服务端加密存储,前端只拿 hasApiKey + apiKeyHint
 
 'use client';
 
 import { create } from 'zustand';
-import { get as idbGet, set as idbSet } from 'idb-keyval';
-import { settingsStore, SETTINGS_KEY } from './db';
 
 // ---------- 类型 ----------
 
 export type Language = 'zh' | 'en';
 export type Theme = 'dark' | 'light';
 
-export interface AppSettings {
-  // API
-  apiKey: string; // 留空则用 .env 的 AGNES_API_KEY
-  baseUrl: string; // 留空则用默认
-  // 模型名(留空用默认值,支持自定义填入服务商 update 后的新模型)
+// 服务端持久字段
+export interface ServerSettings {
   textModel: string;
   imageModel: string;
   videoModel: string;
-  // 生成默认值
   defaultImageSize: string;
   defaultVideoFrames: number;
   defaultVideoFps: number;
   defaultVideoWidth?: number;
   defaultVideoHeight?: number;
   autoTranslate: boolean;
-  // 外观
+  baseUrl: string;
+}
+
+// 客户端持久字段
+interface ClientSettings {
   theme: Theme;
   animations: boolean;
-  // 语言
   language: Language;
 }
 
+// 完整设置(前端用)
+export interface AppSettings extends ServerSettings, ClientSettings {
+  apiKey: string; // 仅前端占位,实际 key 走服务端
+}
+
 export const DEFAULT_SETTINGS: AppSettings = {
-  apiKey: '',
-  baseUrl: '',
+  // 服务端
   textModel: 'agnes-2.0-flash',
   imageModel: 'agnes-image-2.1-flash',
   videoModel: 'agnes-video-v2.0',
@@ -47,10 +50,31 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultVideoWidth: undefined,
   defaultVideoHeight: undefined,
   autoTranslate: true,
+  baseUrl: '',
+  // 客户端
   theme: 'dark',
   animations: true,
   language: 'zh',
+  // API Key(占位)
+  apiKey: '',
 };
+
+const CLIENT_STORAGE_KEY = 'phosphor-client-settings';
+
+// 从 localStorage 读客户端设置(同步)
+function loadClientSettings(): Partial<ClientSettings> {
+  try {
+    const raw = localStorage.getItem(CLIENT_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return {};
+}
+
+function saveClientSettings(settings: ClientSettings) {
+  try {
+    localStorage.setItem(CLIENT_STORAGE_KEY, JSON.stringify(settings));
+  } catch { /* ignore */ }
+}
 
 // ---------- 语言订阅(i18n.ts 用 useSyncExternalStore 订阅) ----------
 
@@ -70,65 +94,124 @@ function notifyLanguageChange() {
   for (const cb of listeners) cb();
 }
 
+// ---------- API Key 状态(服务端来源) ----------
+
+interface ApiKeyState {
+  hasApiKey: boolean;
+  apiKeyHint: string; // 脱敏显示,如 sk-...abcd
+}
+
 // ---------- Settings Store ----------
 
 interface SettingsState {
   settings: AppSettings;
-  loaded: boolean; // IndexedDB 异步加载完成
+  apiKeyState: ApiKeyState;
+  loaded: boolean;
   update: (patch: Partial<AppSettings>) => void;
   load: () => Promise<void>;
+  updateServer: (patch: Partial<ServerSettings>) => Promise<void>;
+  updateApiKey: (newKey: string) => Promise<void>;
 }
 
 export const useSettings = create<SettingsState>((set, get) => ({
   settings: DEFAULT_SETTINGS,
+  apiKeyState: { hasApiKey: false, apiKeyHint: '' },
   loaded: false,
 
+  // 前端即时更新(客户端持久字段:theme/animations/language)
   update: (patch) => {
     const next = { ...get().settings, ...patch };
     set({ settings: next });
-    // 语言变更要通知 i18n 订阅者
+
     if (patch.language && patch.language !== currentLanguage) {
       currentLanguage = patch.language;
       notifyLanguageChange();
     }
-    // 主题变更同步到 DOM + localStorage(给首屏内联脚本快速读取,避免 FOUC)
+
     if (patch.theme && typeof document !== 'undefined') {
       document.documentElement.setAttribute('data-theme', patch.theme);
       try { localStorage.setItem('phosphor-theme', patch.theme); } catch { /* ignore */ }
     }
-    // 持久化(防抖不必要,设置变更频率低)
-    if (get().loaded) {
-      idbSet(SETTINGS_KEY, next, settingsStore).catch(() => {});
-    }
+
+    // 客户端持久字段存 localStorage
+    const clientPart: ClientSettings = {
+      theme: next.theme,
+      animations: next.animations,
+      language: next.language,
+    };
+    saveClientSettings(clientPart);
   },
 
   load: async () => {
     try {
-      const saved = (await idbGet(SETTINGS_KEY, settingsStore)) as AppSettings | undefined;
-      if (saved) {
-        const merged = { ...DEFAULT_SETTINGS, ...saved };
-        set({ settings: merged, loaded: true });
+      const resp = await fetch('/api/settings', { cache: 'no-store' });
+      if (resp.ok) {
+        const data = await resp.json();
+        const serverSettings = data.settings as Partial<ServerSettings>;
+        const clientSettings = typeof window !== 'undefined' ? loadClientSettings() : {};
+
+        const merged: AppSettings = {
+          ...DEFAULT_SETTINGS,
+          ...serverSettings,
+          ...clientSettings,
+        };
+        set({
+          settings: merged,
+          apiKeyState: {
+            hasApiKey: data.hasApiKey ?? false,
+            apiKeyHint: data.apiKeyHint ?? '',
+          },
+          loaded: true,
+        });
         currentLanguage = merged.language;
         notifyLanguageChange();
         if (typeof document !== 'undefined') {
           document.documentElement.setAttribute('data-theme', merged.theme);
-          // 同步写 localStorage,给下次首屏的内联脚本快速读取
           try { localStorage.setItem('phosphor-theme', merged.theme); } catch { /* ignore */ }
         }
         return;
       }
-    } catch {
-      /* IndexedDB 读取失败,用默认值 */
-    }
+    } catch { /* 网络错误,用默认值 */ }
     set({ loaded: true });
+  },
+
+  // 服务端持久字段更新
+  updateServer: async (patch) => {
+    const resp = await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    if (!resp.ok) throw new Error(`更新设置失败: ${resp.status}`);
+    const data = await resp.json();
+    set((state) => ({
+      settings: { ...state.settings, ...(data.settings as Partial<ServerSettings>) },
+    }));
+  },
+
+  // API Key 更新(空字符串 = 清除)
+  updateApiKey: async (newKey) => {
+    const resp = await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: newKey }),
+    });
+    if (!resp.ok) throw new Error(`更新 API Key 失败: ${resp.status}`);
+    const data = await resp.json();
+    set({
+      apiKeyState: {
+        hasApiKey: data.hasApiKey ?? false,
+        apiKeyHint: data.apiKeyHint ?? '',
+      },
+    });
   },
 }));
 
-// ---------- 便捷读取(非组件环境,如 agnes.ts 读 apiKey) ----------
+// ---------- 便捷读取(非组件环境) ----------
 
+// 多用户后 API Key 从服务端 DB 读取,API route 内部自行获取
 export function getApiKey(): string {
-  const s = useSettings.getState().settings;
-  return s.apiKey || process.env.AGNES_API_KEY || '';
+  return process.env.AGNES_API_KEY || '';
 }
 
 export function getBaseUrl(): string {

@@ -4,6 +4,7 @@
 // 触发:/ 键 或 Toolbar 的 + 按钮
 // 交互:输入过滤 → 方向键导航 → Enter 添加 → Esc 关闭
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useReactFlow } from '@xyflow/react';
 import { useFlowStore } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
 import { NODE_METADATA, NODE_GROUP_ORDER, NODE_GROUP_LABEL_KEY } from '@/lib/node-metadata';
@@ -14,7 +15,8 @@ interface CommandPaletteProps {
 
 export function CommandPalette({ onClose }: CommandPaletteProps) {
   const t = useTranslation();
-  const addNode = useFlowStore((s) => s.addNode);
+  const addNodeAt = useFlowStore((s) => s.addNodeAt);
+  const { screenToFlowPosition } = useReactFlow();
   const [query, setQuery] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -39,7 +41,16 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
   };
 
   function add(type: string) {
-    addNode(type);
+    // 新节点放在当前画布视角中心,而不是固定的 (80,80) 默认位置
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
+    const flowPos = screenToFlowPosition({ x: centerX, y: centerY });
+    // 节点宽约 300px,左偏 150 让节点中心对齐视角中心;连续添加错开避免重叠
+    const count = useFlowStore.getState().nodes.length;
+    addNodeAt(type, {
+      x: flowPos.x - 150 + (count % 5) * 30,
+      y: flowPos.y - 80 + (count % 5) * 30,
+    });
     onClose();
   }
 
