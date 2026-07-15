@@ -1,9 +1,12 @@
-// 图片上传代理 —— 接收 multipart 文件,存到 library/uploads/,写入 cache manifest
-// 复用 cache 的 manifest 机制:上传的图也进 manifest,前端通过 /api/cache/[hash] 访问
+// 图片上传代理 —— 接收 multipart 文件,存到 library/uploads/,写入 DB MediaAsset
+// 需登录,上传的图归属于当前用户
+// 复用 cache 机制:上传图也进 DB,前端通过 /api/cache/[hash] 访问
 // 这样上传图和生成图走同一套缓存代理,下游节点无感知
 
 import { NextRequest, NextResponse } from 'next/server';
-import { loadManifest, saveManifest, withManifestLock, LIBRARY_DIR, assertSafeLocalPath } from '@/lib/cache';
+import { LIBRARY_DIR, assertSafeLocalPath } from '@/lib/cache';
+import { prisma } from '@/lib/prisma';
+import { requireUser, isAuthError } from '@/lib/auth-guard';
 import fs from 'fs/promises';
 import path from 'path';
 import { createHash } from 'crypto';
@@ -21,22 +24,21 @@ const ACCEPTED_EXTS: Record<string, string> = {
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await requireUser();
+    if (isAuthError(session)) return session;
+
     const formData = await req.formData();
     const file = formData.get('file');
 
     if (!file || !(file instanceof File)) {
       return NextResponse.json({ error: '未收到文件(file 字段必填)' }, { status: 400 });
     }
-
-    // 校验类型
     if (!ACCEPTED_TYPES.has(file.type)) {
       return NextResponse.json(
         { error: `不支持的文件类型: ${file.type},仅支持 PNG/JPEG/WebP/GIF` },
         { status: 400 }
       );
     }
-
-    // 校验大小
     if (file.size > MAX_UPLOAD_SIZE) {
       return NextResponse.json(
         { error: `文件过大(${(file.size / 1024 / 1024).toFixed(1)}MB),上限 ${MAX_UPLOAD_SIZE / 1024 / 1024}MB` },
@@ -44,17 +46,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 读取文件内容
     const buf = Buffer.from(await file.arrayBuffer());
 
-    // 用文件内容 hash 做文件名(去重:同一张图上传多次只存一份)
+    // 用文件内容 hash 做文件名(去重)
     const hash = createHash('sha1').update(buf).digest('hex').slice(0, 16);
     const ext = ACCEPTED_EXTS[file.type] || '.png';
     const localPath = `${UPLOADS_DIR_NAME}/${hash}${ext}`;
     assertSafeLocalPath(localPath);
     const fullPath = path.join(LIBRARY_DIR, localPath);
 
-    // 确保目录存在 + 写入文件(hash 去重:已存在就不重复写)
+    // 写入文件(hash 去重:已存在就不重复写)
     await fs.mkdir(path.dirname(fullPath), { recursive: true });
     try {
       await fs.access(fullPath);
@@ -62,27 +63,23 @@ export async function POST(req: NextRequest) {
       await fs.writeFile(fullPath, buf);
     }
 
-    // [H4] 写入 cache manifest(走写锁,和 cache route 共享同一把锁防并发覆盖)
-    await withManifestLock(async () => {
-      const manifest = await loadManifest();
-      if (!manifest.entries[hash]) {
-        manifest.entries[hash] = {
-          hash,
-          originalUrl: `upload://${localPath}`,
-          localPath,
-          type: 'image',
-          prompt: 'Uploaded image',
-          createdAt: new Date().toISOString(),
-        };
-        await saveManifest(manifest);
-      }
+    // 写 DB(upsert 防并发)
+    await prisma.mediaAsset.upsert({
+      where: { hash },
+      create: {
+        hash,
+        originalUrl: `upload://${localPath}`,
+        localPath,
+        type: 'image',
+        prompt: 'Uploaded image',
+        userId: session.user.id,
+      },
+      update: {}, // 已存在不更新
     });
-
-    const localUrl = `/api/cache/${hash}`;
 
     return NextResponse.json({
       hash,
-      localUrl,
+      localUrl: `/api/cache/${hash}`,
       size: file.size,
       type: file.type,
     });

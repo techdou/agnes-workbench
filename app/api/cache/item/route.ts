@@ -1,9 +1,14 @@
 // 缓存条目:接收 JSON body {url, type, prompt, projectId},下载到本地,返回同源 URL
+// 需登录,媒体归属当前用户
 import { NextRequest, NextResponse } from 'next/server';
 import { cacheExternalUrl } from '@/lib/cache';
+import { requireUser, isAuthError } from '@/lib/auth-guard';
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await requireUser();
+    if (isAuthError(session)) return session;
+
     const body = await req.json();
     const { url, type, prompt, projectId } = body as {
       url: string;
@@ -12,7 +17,13 @@ export async function POST(req: NextRequest) {
       projectId?: string;
     };
     if (!url) return NextResponse.json({ error: 'url 必填' }, { status: 400 });
-    const result = await cacheExternalUrl(url, type || 'image', prompt, projectId);
+    const result = await cacheExternalUrl(
+      url,
+      type || 'image',
+      prompt,
+      projectId,
+      session.user.id
+    );
     return NextResponse.json({
       hash: result.hash,
       localUrl: `/api/cache/${result.hash}`,
