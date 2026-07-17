@@ -7,11 +7,14 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { useFlowStore } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
-import { NODE_METADATA, NODE_GROUP_ORDER, NODE_GROUP_LABEL_KEY } from '@/lib/node-metadata';
+import { NODE_METADATA, NODE_GROUP_ORDER, NODE_GROUP_LABEL_KEY, NODE_WIDTH, NODE_HEIGHT } from '@/lib/node-metadata';
 
 interface CommandPaletteProps {
   onClose: () => void;
 }
+
+// 会话级添加计数器:连续添加节点时错开,不受画布已有节点数影响
+let sessionAddCount = 0;
 
 export function CommandPalette({ onClose }: CommandPaletteProps) {
   const t = useTranslation();
@@ -45,11 +48,13 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
     const centerX = window.innerWidth / 2;
     const centerY = window.innerHeight / 2;
     const flowPos = screenToFlowPosition({ x: centerX, y: centerY });
-    // 节点宽约 300px,左偏 150 让节点中心对齐视角中心;连续添加错开避免重叠
-    const count = useFlowStore.getState().nodes.length;
+    // 节点中心对齐视角中心(宽高从 node-metadata 常量读取,不再硬编码)
+    // 用会话计数器错开连续添加,不受画布已有节点数影响(避免 5/10/15 个节点时偏移归零)
+    const offset = sessionAddCount % 5;
+    sessionAddCount++;
     addNodeAt(type, {
-      x: flowPos.x - 150 + (count % 5) * 30,
-      y: flowPos.y - 80 + (count % 5) * 30,
+      x: flowPos.x - NODE_WIDTH / 2 + offset * 30,
+      y: flowPos.y - NODE_HEIGHT / 2 + offset * 30,
     });
     onClose();
   }
