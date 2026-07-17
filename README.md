@@ -99,16 +99,58 @@ cp .env.example .env.local
 # 编辑 .env.local，填入你的 API Key
 ```
 
-### 3. 安装并启动
+### 3. 配置数据库（多用户版本必填）
+
+```bash
+# 本地 PostgreSQL 示例
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/phosphor"
+# 或用 Neon / Supabase / RDS 等托管服务的连接串
+
+# 首次启动前跑迁移
+npm run db:migrate   # 开发环境
+# 或
+npm run db:push      # 生产环境直接推 schema
+```
+
+### 4. 生成密钥
+
+```bash
+# Auth.js 登录会话签名
+echo AUTH_SECRET=$(openssl rand -base64 32)
+
+# 用户 API Key 加密（AES-256-GCM）
+echo ENCRYPTION_KEY=$(openssl rand -base64 32)
+```
+
+填入 `.env.local`。
+
+### 5. 安装并启动
 
 ```bash
 npm install
 npm run dev
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)
+打开 [http://localhost:3000](http://localhost:3000)，进入 `/register` 注册账号。
 
-> 也可以在设置面板 → API 里直接填 Key（优先于 .env）。
+> ⚠️ **首个管理员** 用 `.env` 里的 `ADMIN_EMAIL` 注册，自动获得 ADMIN 角色。注册后可访问 `/admin` 入口管理用户。
+
+## 🔐 多用户部署
+
+每个用户登录后:
+- 在「设置 → API」填自己的 Agnes Key（独立计费，AES-256 加密后入库）
+- 自己的项目 / 工作流 / 媒体都隔离在服务端 DB 里
+- 管理员可在 `/admin` 管理所有用户
+
+**权限模型：**
+- `USER` — 普通使用者，只能访问自己的项目和媒体
+- `ADMIN` — 超级管理员，可访问 `/admin` 后台、切换用户角色、禁用账号
+
+**安全防护（服务端强制，所有项目/媒体按 userId 隔离）：**
+- 所有 API Route 必须登录
+- 媒体文件读取校验所有权（不能访问别人的缓存）
+- API Key 仅入库密文，前端只拿 `hasApiKey` + `apiKeyHint`（脱敏显示）
+- 密码 bcrypt(cost=12)哈希
 
 ## 📖 使用方法
 
