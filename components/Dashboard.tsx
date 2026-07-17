@@ -12,6 +12,7 @@ import { importWorkflow } from '@/lib/workflow-io';
 import { TEMPLATES, type WorkflowTemplate } from '@/lib/templates';
 import { ProjectCard } from './ProjectCard';
 import { SettingsModal } from './SettingsModal';
+import { UserMenu } from '@/components/UserMenu';
 
 export function Dashboard() {
   const t = useTranslation();
@@ -172,6 +173,7 @@ export function Dashboard() {
             >
               ⚙
             </button>
+            <UserMenu onOpenSettings={() => setSettingsOpen(true)} />
           </div>
         </div>
       </header>

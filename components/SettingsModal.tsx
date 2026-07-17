@@ -1,7 +1,8 @@
 'use client';
 
 // 设置弹窗 —— API / 模型 / 生成参数 / 外观 / 语言 五个 tab
-// 毛玻璃背景 + 左侧 tab 栏,样式沿用 Phosphor 设计系统
+// API Key + 模型/生成参数:服务端持久(走 /api/settings)
+// 外观 + 语言:客户端持久(localStorage)
 import { useState, useEffect } from 'react';
 import { useSettings, type Language, type Theme } from '@/lib/settings';
 import { useTranslation } from '@/lib/i18n';
@@ -22,10 +23,10 @@ const TABS: { key: Tab; icon: string; labelKey: string }[] = [
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const t = useTranslation();
-  const { settings, update } = useSettings();
+  const settings = useSettings((s) => s.settings);
+  const update = useSettings((s) => s.update);
   const [tab, setTab] = useState<Tab>('api');
 
-  // Esc 关闭
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -43,7 +44,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         style={{ borderColor: 'var(--c-line)', background: 'var(--c-ink)', animation: 'fade-up 0.2s ease-out' }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 左侧 tab 栏 */}
         <nav
           className="flex w-40 shrink-0 flex-col border-r py-4"
           style={{ borderColor: 'var(--c-edge)', background: 'color-mix(in srgb, var(--c-void) 50%, transparent)' }}
@@ -68,16 +68,14 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           ))}
         </nav>
 
-        {/* 右侧内容 */}
         <div className="flex-1 overflow-y-auto p-6">
-          {tab === 'api' && <ApiTab settings={settings} update={update} t={t} />}
+          {tab === 'api' && <ApiTab t={t} />}
           {tab === 'models' && <ModelsTab settings={settings} update={update} t={t} />}
           {tab === 'generation' && <GenTab settings={settings} update={update} t={t} />}
           {tab === 'appearance' && <AppearanceTab settings={settings} update={update} t={t} />}
           {tab === 'language' && <LanguageTab settings={settings} update={update} t={t} />}
         </div>
 
-        {/* 关闭按钮 */}
         <button
           onClick={onClose}
           className="absolute right-4 top-4 rounded p-1 font-mono text-sm transition-colors hover:bg-white/5"
@@ -109,36 +107,55 @@ const inputStyle = { borderColor: 'var(--c-line)', background: 'var(--c-void)', 
 
 // ---------- Tab 内容 ----------
 
-type TabProps = {
-  settings: ReturnType<typeof useSettings.getState>['settings'];
-  update: ReturnType<typeof useSettings.getState>['update'];
-  t: ReturnType<typeof useTranslation>;
-};
+function ApiTab({ t }: { t: ReturnType<typeof useTranslation> }) {
+  const settings = useSettings((s) => s.settings);
+  const apiKeyState = useSettings((s) => s.apiKeyState);
+  const update = useSettings((s) => s.update);
+  const updateApiKey = useSettings((s) => s.updateApiKey);
+  const updateServer = useSettings((s) => s.updateServer);
 
-function ApiTab({ settings, update, t }: TabProps) {
+  const [keyDraft, setKeyDraft] = useState('');
+  const [keySaved, setKeySaved] = useState(false);
+  const [baseUrlSaved, setBaseUrlSaved] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
   const [testError, setTestError] = useState<string | null>(null);
+
+  async function saveKey() {
+    if (!keyDraft.trim()) return;
+    try {
+      await updateApiKey(keyDraft.trim());
+      setKeyDraft('');
+      setKeySaved(true);
+      setTimeout(() => setKeySaved(false), 2000);
+    } catch { /* ignore */ }
+  }
+
+  async function clearKey() {
+    await updateApiKey('');
+    setKeySaved(true);
+    setTimeout(() => setKeySaved(false), 2000);
+  }
+
+  async function saveBaseUrl() {
+    try {
+      await updateServer({ baseUrl: settings.baseUrl });
+      setBaseUrlSaved(true);
+      setTimeout(() => setBaseUrlSaved(false), 2000);
+    } catch { /* ignore */ }
+  }
 
   async function testConnection() {
     setTestStatus('testing');
     setTestError(null);
     try {
-      // 和生图用完全一样的参数构造方式(authHeaders + modelParams)
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (settings.apiKey) headers['X-Agnes-Key'] = settings.apiKey;
-      // 必须传 baseUrl + textModel,和生图链路一致,否则用户在设置里填的 Base URL 不生效
       const body: Record<string, unknown> = { prompt: 'Hi', maxTokens: 5 };
       if (settings.baseUrl) body.baseUrl = settings.baseUrl;
       if (settings.textModel) body.textModel = settings.textModel;
       const resp = await fetch('/api/agnes/text', {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      // 200 = 完全正常
-      // 401 = key 无效但地址通了(能收到 Agnes 的鉴权响应)
-      // 429 = 限流(RPM 超限),但说明地址+key 能连通
-      // 503 = 服务端队列满/过载,但说明地址+key 能连通(只是暂时忙)
       if (resp.ok || resp.status === 401 || resp.status === 429 || resp.status === 503) {
         setTestStatus('ok');
       } else {
@@ -155,25 +172,73 @@ function ApiTab({ settings, update, t }: TabProps) {
   return (
     <div>
       <Field label={t('settings.api.key')} hint={t('settings.api.keyHint')}>
-        <input
-          type="password"
-          value={settings.apiKey}
-          onChange={(e) => update({ apiKey: e.target.value })}
-          placeholder="sk-..."
-          className={inputClass}
-          style={inputStyle}
-        />
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={keyDraft}
+            onChange={(e) => setKeyDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') saveKey(); }}
+            placeholder={
+              apiKeyState.hasApiKey
+                ? `已设置 ${apiKeyState.apiKeyHint}(输入新值覆盖)`
+                : 'sk-...'
+            }
+            className={inputClass}
+            style={inputStyle}
+          />
+          <button
+            onClick={saveKey}
+            disabled={!keyDraft.trim()}
+            className="shrink-0 rounded border px-3 py-2 font-mono text-[10px] tracking-wider transition-colors disabled:opacity-30"
+            style={{ borderColor: 'var(--c-phosphor)', color: 'var(--c-phosphor)' }}
+          >
+            SAVE
+          </button>
+        </div>
+        {apiKeyState.hasApiKey && (
+          <div className="mt-2 flex items-center gap-3">
+            <span className="font-mono text-[10px]" style={{ color: 'var(--c-phosphor)' }}>
+              ✓ {apiKeyState.apiKeyHint}
+            </span>
+            <button
+              onClick={clearKey}
+              className="font-mono text-[10px] underline"
+              style={{ color: 'var(--c-rust)' }}
+            >
+              清除
+            </button>
+          </div>
+        )}
+        {keySaved && (
+          <span className="mt-1 block font-mono text-[10px]" style={{ color: 'var(--c-phosphor)' }}>
+            ✓ 已保存
+          </span>
+        )}
       </Field>
 
       <Field label={t('settings.api.baseUrl')}>
-        <input
-          type="text"
-          value={settings.baseUrl}
-          onChange={(e) => update({ baseUrl: e.target.value })}
-          placeholder="https://apihub.agnes-ai.com"
-          className={inputClass}
-          style={inputStyle}
-        />
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={settings.baseUrl}
+            onChange={(e) => update({ baseUrl: e.target.value })}
+            placeholder="https://apihub.agnes-ai.com"
+            className={inputClass}
+            style={inputStyle}
+          />
+          <button
+            onClick={saveBaseUrl}
+            className="shrink-0 rounded border px-3 py-2 font-mono text-[10px] tracking-wider transition-colors"
+            style={{ borderColor: 'var(--c-phosphor)', color: 'var(--c-phosphor)' }}
+          >
+            SAVE
+          </button>
+        </div>
+        {baseUrlSaved && (
+          <span className="mt-1 block font-mono text-[10px]" style={{ color: 'var(--c-phosphor)' }}>
+            ✓ 已保存
+          </span>
+        )}
       </Field>
 
       <button
@@ -205,19 +270,24 @@ const SIZES = ['1024x768', '1024x1024', '768x1024', '1280x768', '720x1280'];
 const FRAME_OPTIONS = [81, 121, 161, 241, 441];
 const FPS_OPTIONS = [24, 30];
 
-function ModelsTab({ settings, update, t }: TabProps) {
+function ModelsTab({ settings, update, t }: {
+  settings: ReturnType<typeof useSettings.getState>['settings'];
+  update: ReturnType<typeof useSettings.getState>['update'];
+  t: ReturnType<typeof useTranslation>;
+}) {
+  const updateServer = useSettings((s) => s.updateServer);
   const [models, setModels] = useState<string[]>([]);
   const [fetching, setFetching] = useState(false);
   const [fetchMsg, setFetchMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [savedHint, setSavedHint] = useState(false);
 
   async function fetchModels() {
     setFetching(true);
     setFetchMsg(null);
     try {
-      // 构造请求头(带 API key)
-      const headers: Record<string, string> = {};
-      if (settings.apiKey) headers['X-Agnes-Key'] = settings.apiKey;
-      const resp = await fetch('/api/agnes/models', { headers });
+      const params = new URLSearchParams();
+      if (settings.baseUrl) params.set('baseUrl', settings.baseUrl);
+      const resp = await fetch(`/api/agnes/models?${params}`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
       if (data.models && Array.isArray(data.models)) {
@@ -233,11 +303,23 @@ function ModelsTab({ settings, update, t }: TabProps) {
     }
   }
 
+  function updateModel(field: 'textModel' | 'imageModel' | 'videoModel', value: string) {
+    update({ [field]: value } as Partial<typeof settings>);
+    updateServer({ [field]: value }).then(() => {
+      setSavedHint(true);
+      setTimeout(() => setSavedHint(false), 1500);
+    });
+  }
+
   const defaults = { textModel: 'agnes-2.0-flash', imageModel: 'agnes-image-2.1-flash', videoModel: 'agnes-video-v2.0' };
+
+  function resetDefaults() {
+    update(defaults);
+    updateServer(defaults);
+  }
 
   return (
     <div>
-      {/* 拉取按钮 */}
       <div className="mb-5 flex items-center gap-3">
         <button
           onClick={fetchModels}
@@ -257,7 +339,6 @@ function ModelsTab({ settings, update, t }: TabProps) {
         )}
       </div>
 
-      {/* 可用模型列表(拉取后显示) */}
       {models.length > 0 && (
         <div className="mb-5 rounded border p-3" style={{ borderColor: 'var(--c-edge)', background: 'var(--c-void)' }}>
           <p className="mb-2 font-mono text-[9px] tracking-[0.15em]" style={{ color: 'var(--c-text-faint)' }}>
@@ -277,11 +358,10 @@ function ModelsTab({ settings, update, t }: TabProps) {
         </div>
       )}
 
-      <p className="mb-4 text-[11px]" style={{ color: 'var(--c-text-faint)' }}>
-        {t('settings.models.customHint')}
-      </p>
+      {savedHint && (
+        <span className="mb-3 block font-mono text-[10px]" style={{ color: 'var(--c-phosphor)' }}>✓ 已保存</span>
+      )}
 
-      {/* 三个模型输入框(带 datalist 自动补全) */}
       <datalist id="agnes-models-list">
         {models.map((m) => <option key={m} value={m} />)}
       </datalist>
@@ -290,7 +370,7 @@ function ModelsTab({ settings, update, t }: TabProps) {
         <input
           list="agnes-models-list"
           value={settings.textModel}
-          onChange={(e) => update({ textModel: e.target.value })}
+          onChange={(e) => updateModel('textModel', e.target.value)}
           placeholder={defaults.textModel}
           className={inputClass}
           style={inputStyle}
@@ -301,7 +381,7 @@ function ModelsTab({ settings, update, t }: TabProps) {
         <input
           list="agnes-models-list"
           value={settings.imageModel}
-          onChange={(e) => update({ imageModel: e.target.value })}
+          onChange={(e) => updateModel('imageModel', e.target.value)}
           placeholder={defaults.imageModel}
           className={inputClass}
           style={inputStyle}
@@ -312,7 +392,7 @@ function ModelsTab({ settings, update, t }: TabProps) {
         <input
           list="agnes-models-list"
           value={settings.videoModel}
-          onChange={(e) => update({ videoModel: e.target.value })}
+          onChange={(e) => updateModel('videoModel', e.target.value)}
           placeholder={defaults.videoModel}
           className={inputClass}
           style={inputStyle}
@@ -320,50 +400,42 @@ function ModelsTab({ settings, update, t }: TabProps) {
       </Field>
 
       <button
-        onClick={() => update(defaults)}
+        onClick={resetDefaults}
         className="rounded border px-3 py-1.5 font-mono text-[10px] tracking-wider transition-colors"
         style={{ borderColor: 'var(--c-line)', color: 'var(--c-text-dim)' }}
       >
         ↺ {t('settings.models.reset')}
       </button>
-
-      {/* 文档链接 */}
-      <div className="mt-6 border-t pt-4" style={{ borderColor: 'var(--c-edge)' }}>
-        <p className="mb-2 font-mono text-[9px] tracking-[0.15em]" style={{ color: 'var(--c-text-faint)' }}>
-          {t('settings.docs.title')}
-        </p>
-        <div className="flex flex-col gap-1.5">
-          <a
-            href="https://agnes-ai.com/zh-Hans/docs/overview"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-mono text-[11px] transition-colors hover:underline"
-            style={{ color: 'var(--c-amber)' }}
-          >
-            → {t('settings.docs.overview')}
-          </a>
-          <a
-            href="https://wiki.agnes-ai.com/zh-Hans/docs/overview"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-mono text-[11px] transition-colors hover:underline"
-            style={{ color: 'var(--c-amber)' }}
-          >
-            → Wiki {t('settings.docs.overview')}
-          </a>
-        </div>
-      </div>
     </div>
   );
 }
 
-function GenTab({ settings, update, t }: TabProps) {
+function GenTab({ settings, update, t }: {
+  settings: ReturnType<typeof useSettings.getState>['settings'];
+  update: ReturnType<typeof useSettings.getState>['update'];
+  t: ReturnType<typeof useTranslation>;
+}) {
+  const updateServer = useSettings((s) => s.updateServer);
+  const [savedHint, setSavedHint] = useState(false);
+
+  function updateGen(patch: Parameters<typeof update>[0]) {
+    update(patch);
+    updateServer(patch).then(() => {
+      setSavedHint(true);
+      setTimeout(() => setSavedHint(false), 1500);
+    });
+  }
+
   return (
     <div>
+      {savedHint && (
+        <span className="mb-3 block font-mono text-[10px]" style={{ color: 'var(--c-phosphor)' }}>✓ 已保存</span>
+      )}
+
       <Field label={t('settings.gen.defaultSize')}>
         <select
           value={settings.defaultImageSize}
-          onChange={(e) => update({ defaultImageSize: e.target.value })}
+          onChange={(e) => updateGen({ defaultImageSize: e.target.value })}
           className={inputClass}
           style={inputStyle}
         >
@@ -375,7 +447,7 @@ function GenTab({ settings, update, t }: TabProps) {
         <Field label={t('settings.gen.defaultFrames')}>
           <select
             value={settings.defaultVideoFrames}
-            onChange={(e) => update({ defaultVideoFrames: Number(e.target.value) })}
+            onChange={(e) => updateGen({ defaultVideoFrames: Number(e.target.value) })}
             className={inputClass}
             style={inputStyle}
           >
@@ -386,7 +458,7 @@ function GenTab({ settings, update, t }: TabProps) {
         <Field label={t('settings.gen.defaultFps')}>
           <select
             value={settings.defaultVideoFps}
-            onChange={(e) => update({ defaultVideoFps: Number(e.target.value) })}
+            onChange={(e) => updateGen({ defaultVideoFps: Number(e.target.value) })}
             className={inputClass}
             style={inputStyle}
           >
@@ -400,7 +472,7 @@ function GenTab({ settings, update, t }: TabProps) {
           <input
             type="checkbox"
             checked={settings.autoTranslate}
-            onChange={(e) => update({ autoTranslate: e.target.checked })}
+            onChange={(e) => updateGen({ autoTranslate: e.target.checked })}
             style={{ accentColor: 'var(--c-amber)', width: '16px', height: '16px' }}
           />
           <span className="text-[13px]" style={{ color: 'var(--c-text-dim)' }}>
@@ -412,7 +484,11 @@ function GenTab({ settings, update, t }: TabProps) {
   );
 }
 
-function AppearanceTab({ settings, update, t }: TabProps) {
+function AppearanceTab({ settings, update, t }: {
+  settings: ReturnType<typeof useSettings.getState>['settings'];
+  update: ReturnType<typeof useSettings.getState>['update'];
+  t: ReturnType<typeof useTranslation>;
+}) {
   const themes: { key: Theme; labelKey: string; icon: string }[] = [
     { key: 'dark', labelKey: 'settings.app.themeDark', icon: '◆' },
     { key: 'light', labelKey: 'settings.app.themeLight', icon: '◇' },
@@ -457,7 +533,11 @@ function AppearanceTab({ settings, update, t }: TabProps) {
   );
 }
 
-function LanguageTab({ settings, update, t }: TabProps) {
+function LanguageTab({ settings, update, t }: {
+  settings: ReturnType<typeof useSettings.getState>['settings'];
+  update: ReturnType<typeof useSettings.getState>['update'];
+  t: ReturnType<typeof useTranslation>;
+}) {
   const langs: { key: Language; labelKey: string }[] = [
     { key: 'zh', labelKey: 'settings.lang.zh' },
     { key: 'en', labelKey: 'settings.lang.en' },

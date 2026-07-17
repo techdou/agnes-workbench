@@ -8,6 +8,7 @@ import { useFlowStore } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
 import { useToast } from '@/lib/useToast';
 import { exportWorkflow } from '@/lib/workflow-io';
+import { UserMenu } from '@/components/UserMenu';
 
 interface ToolbarProps {
   onOpenPalette: () => void;
@@ -167,6 +168,8 @@ export function Toolbar({ onOpenPalette, onOpenSettings }: ToolbarProps) {
           >
             {t('toolbar.clear')}
           </button>
+
+          <UserMenu onOpenSettings={onOpenSettings} />
         </div>
       </div>
     </header>
