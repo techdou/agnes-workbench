@@ -24,7 +24,17 @@ export async function GET() {
   });
 
   // 计算每个项目的节点/连线数(nodes 是 JSON 数组)
-  const enrichedProjects = projects.map((p) => ({
+  // 显式类型标注,避免 prisma client 未 generate 时隐式 any
+  type ProjectRow = {
+    id: string;
+    name: string;
+    createdAt: Date;
+    updatedAt: Date;
+    nodes: unknown;
+    edges: unknown;
+    user: { id: string; email: string; name: string | null };
+  };
+  const enrichedProjects = (projects as ProjectRow[]).map((p) => ({
     id: p.id,
     name: p.name,
     createdAt: p.createdAt,
