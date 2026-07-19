@@ -63,9 +63,9 @@ export async function POST(req: NextRequest) {
       await fs.writeFile(fullPath, buf);
     }
 
-    // 写 DB(upsert 防并发)
+    // 写 DB(按 [userId, hash] 唯一约束 upsert 防并发)
     await prisma.mediaAsset.upsert({
-      where: { hash },
+      where: { userId_hash: { userId: session.user.id, hash } },
       create: {
         hash,
         originalUrl: `upload://${localPath}`,

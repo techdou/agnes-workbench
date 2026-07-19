@@ -1,7 +1,7 @@
 // 缓存代理:GET 按 hash 取本地文件
-// 需登录,校验该媒体属于当前用户(防越权访问他人缓存)
+// 需登录,严格校验 (userId, hash) 所有权 —— 用户 A 不能读 B 的缓存
 import { NextRequest, NextResponse } from 'next/server';
-import { getEntryByHash, LIBRARY_DIR, assertSafeLocalPath } from '@/lib/cache';
+import { getEntryByUserHash, LIBRARY_DIR, assertSafeLocalPath } from '@/lib/cache';
 import { getSession } from '@/lib/auth-guard';
 import fs from 'fs/promises';
 import path from 'path';
@@ -36,14 +36,14 @@ export async function GET(
     if (!/^[0-9a-f]{1,32}$/.test(hash)) {
       return NextResponse.json({ error: '非法 hash' }, { status: 400 });
     }
-    const entry = await getEntryByHash(hash);
+
+    // 管理员可读任意媒体;普通用户严格按 (userId, hash) 校验
+    const isAdmin = session.user.role === 'ADMIN';
+    const entry = isAdmin
+      ? await import('@/lib/cache').then((m) => m.getEntryByHash(hash))
+      : await getEntryByUserHash(session.user.id, hash);
     if (!entry) {
       return NextResponse.json({ error: `hash ${hash} 未找到` }, { status: 404 });
-    }
-
-    // 所有权校验:媒体必须属于当前用户(管理员可访问任意媒体)
-    if (entry.userId && entry.userId !== session.user.id && session.user.role !== 'ADMIN') {
-      return NextResponse.json({ error: '无权访问' }, { status: 403 });
     }
 
     assertSafeLocalPath(entry.localPath);

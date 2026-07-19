@@ -137,43 +137,64 @@ async function doCache(
   await ensureDirs();
 
   const hash = await hashUrl(url);
+  const uid = userId || '';
 
-  // 先查 DB:该 hash 是否已缓存(全局去重,同一 URL 只存一份文件)
-  const existing = await prisma.mediaAsset.findUnique({ where: { hash } });
-  if (existing) {
-    assertSafeLocalPath(existing.localPath);
+  // 1. 当前用户是否已有该 hash 的 DB 行 → 直接复用
+  const ownExisting = uid
+    ? await prisma.mediaAsset.findUnique({ where: { userId_hash: { userId: uid, hash } } })
+    : null;
+  if (ownExisting) {
+    assertSafeLocalPath(ownExisting.localPath);
     return {
       hash,
-      localPath: existing.localPath,
-      fullPath: path.join(LIBRARY_DIR, existing.localPath),
+      localPath: ownExisting.localPath,
+      fullPath: path.join(LIBRARY_DIR, ownExisting.localPath),
       created: false,
     };
   }
 
-  const ext = extFromUrl(url, type === 'image' ? '.png' : '.mp4');
-  const subdir = type === 'image' ? 'images' : 'videos';
-  const localPath = `${subdir}/${hash}${ext}`;
-  assertSafeLocalPath(localPath);
-  const fullPath = path.join(LIBRARY_DIR, localPath);
-
-  // 下载 + 大小限制
-  const resp = await fetch(url);
-  if (!resp.ok) {
-    throw new Error(`下载失败: HTTP ${resp.status} ${url}`);
-  }
-  const contentLength = Number(resp.headers.get('content-length') || 0);
-  if (contentLength > MAX_FILE_SIZE) {
-    throw new Error(`文件过大(${(contentLength / 1024 / 1024).toFixed(1)}MB),超过 ${MAX_FILE_SIZE / 1024 / 1024}MB 限制`);
-  }
-  const buf = Buffer.from(await resp.arrayBuffer());
-  if (buf.length > MAX_FILE_SIZE) {
-    throw new Error(`文件过大(${(buf.length / 1024 / 1024).toFixed(1)}MB),超过 ${MAX_FILE_SIZE / 1024 / 1024}MB 限制`);
-  }
-  await fs.writeFile(fullPath, buf);
-
-  // 写 DB(hash 全局唯一,用 upsert 防并发竞争)
-  await prisma.mediaAsset.upsert({
+  // 2. 文件物理副本:看是否已有任意用户下载过(磁盘去重)
+  const anyExisting = await prisma.mediaAsset.findFirst({
     where: { hash },
+    select: { localPath: true },
+  });
+
+  let localPath: string;
+  let fullPath: string;
+  let fileCreated = false;
+
+  if (anyExisting) {
+    // 复用磁盘文件(无需重新下载)
+    assertSafeLocalPath(anyExisting.localPath);
+    localPath = anyExisting.localPath;
+    fullPath = path.join(LIBRARY_DIR, localPath);
+  } else {
+    // 首次下载
+    const ext = extFromUrl(url, type === 'image' ? '.png' : '.mp4');
+    const subdir = type === 'image' ? 'images' : 'videos';
+    localPath = `${subdir}/${hash}${ext}`;
+    assertSafeLocalPath(localPath);
+    fullPath = path.join(LIBRARY_DIR, localPath);
+
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      throw new Error(`下载失败: HTTP ${resp.status} ${url}`);
+    }
+    const contentLength = Number(resp.headers.get('content-length') || 0);
+    if (contentLength > MAX_FILE_SIZE) {
+      throw new Error(`文件过大(${(contentLength / 1024 / 1024).toFixed(1)}MB),超过 ${MAX_FILE_SIZE / 1024 / 1024}MB 限制`);
+    }
+    const buf = Buffer.from(await resp.arrayBuffer());
+    if (buf.length > MAX_FILE_SIZE) {
+      throw new Error(`文件过大(${(buf.length / 1024 / 1024).toFixed(1)}MB),超过 ${MAX_FILE_SIZE / 1024 / 1024}MB 限制`);
+    }
+    await fs.writeFile(fullPath, buf);
+    fileCreated = true;
+  }
+
+  // 3. 给当前用户插一行(唯一约束 [userId, hash] 防并发)
+  await prisma.mediaAsset.upsert({
+    where: { userId_hash: { userId: uid, hash } },
     create: {
       hash,
       originalUrl: url,
@@ -181,17 +202,40 @@ async function doCache(
       type,
       prompt,
       projectId: projectId || null,
-      userId: userId || '',
+      userId: uid,
     },
-    update: {}, // 已存在则不更新
+    update: {}, // 该用户已有则不更新
   });
 
-  return { hash, localPath, fullPath, created: true };
+  return { hash, localPath, fullPath, created: fileCreated };
 }
 
 // 根据 hash 取条目(用于 /api/cache/[hash] 路由)
+// 多用户场景下:同一个 hash 可能属于多个用户,这里返回任意一条用于读文件
+// 所有权校验由路由层基于 userId 做
 export async function getEntryByHash(hash: string): Promise<ManifestEntry | undefined> {
-  const asset = await prisma.mediaAsset.findUnique({ where: { hash } });
+  const asset = await prisma.mediaAsset.findFirst({ where: { hash } });
+  if (!asset) return undefined;
+  return {
+    hash: asset.hash,
+    originalUrl: asset.originalUrl,
+    localPath: asset.localPath,
+    type: asset.type as 'image' | 'video',
+    prompt: asset.prompt || undefined,
+    createdAt: asset.createdAt.toISOString(),
+    projectId: asset.projectId || undefined,
+    userId: asset.userId,
+  };
+}
+
+// 按 (userId, hash) 精确查找 —— 用于所有权校验
+export async function getEntryByUserHash(
+  userId: string,
+  hash: string
+): Promise<ManifestEntry | undefined> {
+  const asset = await prisma.mediaAsset.findUnique({
+    where: { userId_hash: { userId, hash } },
+  });
   if (!asset) return undefined;
   return {
     hash: asset.hash,
@@ -238,7 +282,7 @@ const MAX_BASE64_SIZE = 10 * 1024 * 1024;
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 const VIDEO_EXTS = new Set(['.mp4', '.webm', '.mov']);
 
-export async function resolveLocalImages(urls: string[]): Promise<string[]> {
+export async function resolveLocalImages(urls: string[], userId?: string): Promise<string[]> {
   const result: string[] = [];
   for (const url of urls) {
     if (url.startsWith('/api/cache/')) {
@@ -248,7 +292,11 @@ export async function resolveLocalImages(urls: string[]): Promise<string[]> {
         continue;
       }
       try {
-        const entry = await getEntryByHash(hash);
+        // 严格按 userId 校验所有权:用户只能 base64 自己的缓存图片
+        // userId 为空时不解析(保守失败,保留原 URL)
+        const entry = userId
+          ? await getEntryByUserHash(userId, hash)
+          : undefined;
         if (!entry) { result.push(url); continue; }
 
         const ext = path.extname(entry.localPath).toLowerCase();
@@ -285,4 +333,4 @@ export async function resolveLocalImages(urls: string[]): Promise<string[]> {
 }
 
 // 导出供路由层使用
-export { LIBRARY_DIR, assertSafeLocalPath };
+export { LIBRARY_DIR, assertSafeLocalPath, assertSafeUrl };

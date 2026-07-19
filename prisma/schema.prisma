@@ -39,9 +39,11 @@ model Project {
   name      String
   nodes     Json     @default("[]") // React Flow Node[]
   edges     Json     @default("[]") // React Flow Edge[]
-  thumbnail String? // 画布缩略图 dataURL
+  thumbnail String? // 画布首张生成图 cachedUrl
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  mediaAssets MediaAsset[]
 
   @@index([userId])
   @@index([updatedAt])
@@ -52,13 +54,17 @@ model MediaAsset {
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   projectId    String?
-  hash         String   @unique // sha1(url)[:16],文件去重 + 快速查找
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  hash         String // sha1(url)[:16],文件内容去重
   originalUrl  String // Agnes 返回的外部 URL
   localPath    String // 相对 library 目录的路径,如 images/abc.png
   type         String // 'image' | 'video'
   prompt       String?
   createdAt    DateTime @default(now())
 
+  // 多用户场景下同一 URL 各用户独立访问权:按 (userId, hash) 唯一
+  // 文件物理去重通过 localPath 实现,这里 DB 行按用户隔离
+  @@unique([userId, hash])
   @@index([userId])
   @@index([projectId])
   @@index([hash])

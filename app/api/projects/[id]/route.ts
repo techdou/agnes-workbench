@@ -68,7 +68,8 @@ export async function DELETE(_req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ error: '项目不存在' }, { status: 404 });
   }
 
-  // onDelete: Cascade 会自动删除关联的 MediaAsset
+  // 删除项目;关联 MediaAsset 通过 onDelete: SetNull 把 projectId 置空
+  // (媒体本身保留,仍属于用户 → 仍出现在画廊,只是脱离已删项目)
   await prisma.project.delete({ where: { id } });
 
   return NextResponse.json({ ok: true });
