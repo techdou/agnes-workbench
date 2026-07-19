@@ -28,6 +28,18 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
     }
   }
 
+  // 防止把最后一个管理员降级或禁用(锁死系统)
+  if (body.role === 'USER' || body.disabled === true) {
+    const adminCount = await prisma.user.count({ where: { role: 'ADMIN', disabled: false } });
+    const target = await prisma.user.findUnique({ where: { id }, select: { role: true, disabled: true } });
+    if (target?.role === 'ADMIN' && !target.disabled && adminCount <= 1) {
+      return NextResponse.json(
+        { error: '系统至少需要保留一个启用的管理员' },
+        { status: 400 }
+      );
+    }
+  }
+
   const data: Record<string, unknown> = {};
   for (const field of ALLOWED_FIELDS) {
     if (field in body) data[field] = body[field];

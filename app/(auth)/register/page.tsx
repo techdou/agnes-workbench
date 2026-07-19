@@ -44,6 +44,15 @@ export default function RegisterPage() {
         return;
       }
 
+      // 邮箱已注册(防枚举:服务端统一返回 200,这里引导去登录)
+      if (data.alreadyRegistered) {
+        setError(t('auth.register.error'));
+        setLoading(false);
+        // 延迟跳转,让用户看到提示
+        setTimeout(() => router.push('/login'), 1500);
+        return;
+      }
+
       // 注册成功,自动登录
       const result = await signIn('credentials', {
         email,

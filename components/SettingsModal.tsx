@@ -205,13 +205,13 @@ function ApiTab({ t }: { t: ReturnType<typeof useTranslation> }) {
               className="font-mono text-[10px] underline"
               style={{ color: 'var(--c-rust)' }}
             >
-              清除
+              {t('common.clear')}
             </button>
           </div>
         )}
         {keySaved && (
           <span className="mt-1 block font-mono text-[10px]" style={{ color: 'var(--c-phosphor)' }}>
-            ✓ 已保存
+            ✓ {t('common.saved')}
           </span>
         )}
       </Field>
@@ -236,7 +236,7 @@ function ApiTab({ t }: { t: ReturnType<typeof useTranslation> }) {
         </div>
         {baseUrlSaved && (
           <span className="mt-1 block font-mono text-[10px]" style={{ color: 'var(--c-phosphor)' }}>
-            ✓ 已保存
+            ✓ {t('common.saved')}
           </span>
         )}
       </Field>
@@ -359,7 +359,7 @@ function ModelsTab({ settings, update, t }: {
       )}
 
       {savedHint && (
-        <span className="mb-3 block font-mono text-[10px]" style={{ color: 'var(--c-phosphor)' }}>✓ 已保存</span>
+        <span className="mb-3 block font-mono text-[10px]" style={{ color: 'var(--c-phosphor)' }}>✓ {t('common.saved')}</span>
       )}
 
       <datalist id="agnes-models-list">
@@ -429,7 +429,7 @@ function GenTab({ settings, update, t }: {
   return (
     <div>
       {savedHint && (
-        <span className="mb-3 block font-mono text-[10px]" style={{ color: 'var(--c-phosphor)' }}>✓ 已保存</span>
+        <span className="mb-3 block font-mono text-[10px]" style={{ color: 'var(--c-phosphor)' }}>✓ {t('common.saved')}</span>
       )}
 
       <Field label={t('settings.gen.defaultSize')}>

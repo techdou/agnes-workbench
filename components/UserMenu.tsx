@@ -4,6 +4,7 @@
 // 显示当前用户邮箱 + 设置入口 + 管理员入口(仅 ADMIN) + 退出登录
 
 import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { useTranslation } from '@/lib/i18n';
@@ -14,6 +15,7 @@ interface UserMenuProps {
 
 export function UserMenu({ onOpenSettings }: UserMenuProps) {
   const t = useTranslation();
+  const router = useRouter();
   const { data: session } = useSession();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -32,7 +34,8 @@ export function UserMenu({ onOpenSettings }: UserMenuProps) {
 
   const email = session.user.email || '';
   const initial = email[0]?.toUpperCase() || '?';
-  const role = (session.user as { role?: string }).role || 'USER';
+  // auth.ts 已扩展 session.user.role 类型(非空),无需 cast
+  const role = session.user.role;
 
   return (
     <div ref={ref} className="relative">
@@ -114,7 +117,12 @@ export function UserMenu({ onOpenSettings }: UserMenuProps) {
             )}
 
             <button
-              onClick={() => signOut({ callbackUrl: '/login' })}
+              onClick={async () => {
+                setOpen(false);
+                await signOut({ redirect: false });
+                router.push('/login');
+                router.refresh();
+              }}
               className="block w-full px-4 py-2 text-left font-mono text-xs transition-colors hover:bg-white/5"
               style={{ color: 'var(--c-rust)' }}
             >

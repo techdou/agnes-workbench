@@ -55,7 +55,7 @@ export default function AdminProjectsPage() {
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') setSearch(searchInput.trim()); }}
-          placeholder="搜索项目名或用户邮箱…"
+          placeholder={t('admin.projects.name') + ' / ' + t('admin.projects.user')}
           className="flex-1 rounded border px-3 py-2 font-mono text-xs outline-none"
           style={{
             borderColor: 'var(--c-line)',
@@ -68,7 +68,7 @@ export default function AdminProjectsPage() {
           className="rounded border px-4 py-2 font-mono text-xs"
           style={{ borderColor: 'var(--c-phosphor)', color: 'var(--c-phosphor)' }}
         >
-          搜索
+          {t('admin.search.button')}
         </button>
       </div>
 
@@ -93,7 +93,7 @@ export default function AdminProjectsPage() {
             ) : projects.length === 0 ? (
               <tr>
                 <td colSpan={5} className="p-6 text-center font-mono text-xs" style={{ color: 'var(--c-text-faint)' }}>
-                  暂无项目
+                  {t('admin.empty')}
                 </td>
               </tr>
             ) : (
@@ -114,7 +114,7 @@ export default function AdminProjectsPage() {
                       className="rounded border px-2 py-1 font-mono text-[10px]"
                       style={{ borderColor: 'var(--c-amber)', color: 'var(--c-amber)' }}
                     >
-                      打开 →
+                      {t('admin.action.open')} →
                     </Link>
                   </Td>
                 </tr>

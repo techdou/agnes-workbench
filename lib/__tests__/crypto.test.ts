@@ -27,12 +27,20 @@ describe('crypto / AES-256-GCM', () => {
     expect(decrypt(b)).toBe(plaintext);
   });
 
-  it('密文格式 iv:ciphertext', () => {
+  it('密文格式 v1:iv:ciphertext', () => {
     const encrypted = encrypt('hello');
     const parts = encrypted.split(':');
-    expect(parts).toHaveLength(2);
-    expect(parts[0]).toMatch(/^[A-Za-z0-9+/=]+$/); // base64
-    expect(parts[1]).toMatch(/^[A-Za-z0-9+/=]+$/);
+    expect(parts).toHaveLength(3);
+    expect(parts[0]).toBe('v1');
+    expect(parts[1]).toMatch(/^[A-Za-z0-9+/=]+$/); // base64 iv
+    expect(parts[2]).toMatch(/^[A-Za-z0-9+/=]+$/); // base64 ct+tag
+  });
+
+  it('兼容老格式 iv:ciphertext(无版本前缀)', () => {
+    // 模拟老格式密文:直接构造一个不带 v1: 前缀的有效密文
+    const encrypted = encrypt('legacy');
+    const stripped = encrypted.split(':').slice(1).join(':'); // 去掉 v1:
+    expect(decrypt(stripped)).toBe('legacy');
   });
 
   it('篡改密文导致解密失败(GCM 完整性校验)', () => {

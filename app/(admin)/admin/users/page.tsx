@@ -78,7 +78,7 @@ export default function AdminUsersPage() {
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') setSearch(searchInput.trim()); }}
-          placeholder="搜索邮箱或昵称…"
+          placeholder={t('admin.users.email') + ' / ' + t('admin.users.name')}
           className="flex-1 rounded border px-3 py-2 font-mono text-xs outline-none"
           style={{
             borderColor: 'var(--c-line)',
@@ -91,7 +91,7 @@ export default function AdminUsersPage() {
           className="rounded border px-4 py-2 font-mono text-xs"
           style={{ borderColor: 'var(--c-phosphor)', color: 'var(--c-phosphor)' }}
         >
-          搜索
+          {t('admin.search.button')}
         </button>
         {search && (
           <button
@@ -129,7 +129,7 @@ export default function AdminUsersPage() {
             ) : users.length === 0 ? (
               <tr>
                 <td colSpan={8} className="p-6 text-center font-mono text-xs" style={{ color: 'var(--c-text-faint)' }}>
-                  暂无用户
+                  {t('admin.empty')}
                 </td>
               </tr>
             ) : (

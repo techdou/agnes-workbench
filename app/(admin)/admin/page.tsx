@@ -72,14 +72,14 @@ export default function AdminOverviewPage() {
       <section className="mt-10">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-display text-lg font-semibold" style={{ color: 'var(--c-text)' }}>
-            最近用户
+            {t('admin.recentUsers')}
           </h2>
           <Link
             href="/admin/users"
             className="font-mono text-xs"
             style={{ color: 'var(--c-amber)' }}
           >
-            查看全部 →
+            {t('admin.viewAll')} →
           </Link>
         </div>
         <div className="rounded-lg border" style={{ borderColor: 'var(--c-edge)', background: 'var(--c-panel)' }}>
@@ -114,7 +114,7 @@ export default function AdminOverviewPage() {
           ))}
           {recentUsers.length === 0 && (
             <p className="px-4 py-6 text-center font-mono text-xs" style={{ color: 'var(--c-text-faint)' }}>
-              暂无用户
+              {t('admin.empty')}
             </p>
           )}
         </div>

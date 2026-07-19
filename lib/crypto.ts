@@ -1,12 +1,20 @@
 // AES-256-GCM 加解密 —— 用于用户 Agnes API Key 的安全存储
-// 密钥来自环境变量 ENCRYPTION_KEY(base64 编码的 32 字节)
 //
-// 加密格式:base64(iv) : base64(ciphertext + authTag)
-// GCM 模式自带完整性校验,密钥错误会抛错而非返回乱数据
+// 密钥来自环境变量 ENCRYPTION_KEY(base64 编码的 32 字节)
+// 支持密钥版本前缀(未来轮换时:encrypt 用 v2,decrypt 兼容 v1)
+//
+// 加密格式:v1:base64(iv):base64(ciphertext + authTag)
+// 老格式(无 v1: 前缀)按 v1 解密,向后兼容
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 
-const KEY_BUFFER = (() => {
+const CURRENT_VERSION = 'v1';
+const IV_LENGTH = 12; // GCM 推荐 96-bit IV
+
+// 惰性加载:不在模块顶层抛错,避免 import 时崩(让调用方拿到友好错误)
+let _keyBuffer: Buffer | null = null;
+function getKeyBuffer(): Buffer {
+  if (_keyBuffer) return _keyBuffer;
   const raw = process.env.ENCRYPTION_KEY;
   if (!raw) {
     throw new Error('ENCRYPTION_KEY 环境变量未配置');
@@ -15,41 +23,54 @@ const KEY_BUFFER = (() => {
   if (buf.length !== 32) {
     throw new Error(`ENCRYPTION_KEY 必须是 base64 编码的 32 字节,当前 ${buf.length} 字节`);
   }
+  _keyBuffer = buf;
   return buf;
-})();
-
-const IV_LENGTH = 12; // GCM 推荐 96-bit IV
+}
 
 /**
  * 加密明文字符串
- * 返回格式:base64(iv):base64(ciphertext+tag)
+ * 返回格式:v1:base64(iv):base64(ciphertext+tag)
  */
 export function encrypt(plaintext: string): string {
+  const key = getKeyBuffer();
   const iv = randomBytes(IV_LENGTH);
-  const cipher = createCipheriv('aes-256-gcm', KEY_BUFFER, iv);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
   const encrypted = Buffer.concat([
     cipher.update(plaintext, 'utf8'),
     cipher.final(),
   ]);
   const tag = cipher.getAuthTag();
   // tag 拼在密文末尾,解密时拆出来
-  return `${iv.toString('base64')}:${Buffer.concat([encrypted, tag]).toString('base64')}`;
+  return `${CURRENT_VERSION}:${iv.toString('base64')}:${Buffer.concat([encrypted, tag]).toString('base64')}`;
 }
 
 /**
  * 解密 encrypt() 产出的密文
+ * 兼容老格式(无版本前缀)
  */
 export function decrypt(payload: string): string {
-  const [ivB64, dataB64] = payload.split(':');
-  if (!ivB64 || !dataB64) {
+  const key = getKeyBuffer();
+  const parts = payload.split(':');
+
+  let ivB64: string;
+  let dataB64: string;
+
+  if (parts.length === 3 && parts[0] === CURRENT_VERSION) {
+    // 新格式:v1:iv:data
+    [, ivB64, dataB64] = parts;
+  } else if (parts.length === 2) {
+    // 老格式(无版本前缀):iv:data
+    [ivB64, dataB64] = parts;
+  } else {
     throw new Error('密文格式错误');
   }
+
   const iv = Buffer.from(ivB64, 'base64');
   const combined = Buffer.from(dataB64, 'base64');
   const tag = combined.subarray(combined.length - 16);
   const ciphertext = combined.subarray(0, combined.length - 16);
 
-  const decipher = createDecipheriv('aes-256-gcm', KEY_BUFFER, iv);
+  const decipher = createDecipheriv('aes-256-gcm', key, iv);
   decipher.setAuthTag(tag);
   const decrypted = Buffer.concat([
     decipher.update(ciphertext),

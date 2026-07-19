@@ -272,6 +272,14 @@ const zh = {
   'admin.projects.nodes': '节点数',
   'admin.projects.updatedAt': '更新时间',
   'admin.back': '返回工作台',
+  'admin.recentUsers': '最近用户',
+  'admin.viewAll': '查看全部',
+  'admin.empty': '暂无数据',
+  'admin.search.placeholder': '搜索…',
+  'admin.search.button': '搜索',
+  'admin.action.open': '打开',
+  'common.saved': '已保存',
+  'common.clear': '清除',
 };
 
 export default zh;

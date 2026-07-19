@@ -272,6 +272,14 @@ const en = {
   'admin.projects.nodes': 'Nodes',
   'admin.projects.updatedAt': 'Updated',
   'admin.back': 'Back to Studio',
+  'admin.recentUsers': 'Recent Users',
+  'admin.viewAll': 'View All',
+  'admin.empty': 'No data',
+  'admin.search.placeholder': 'Search…',
+  'admin.search.button': 'Search',
+  'admin.action.open': 'Open',
+  'common.saved': 'Saved',
+  'common.clear': 'Clear',
 };
 
 export default en;
