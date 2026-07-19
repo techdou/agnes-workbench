@@ -144,6 +144,7 @@ const zh = {
   'toast.projectCreated': '项目已创建',
   'toast.projectDeleted': '项目已删除',
   'toast.projectRenamed': '项目已重命名',
+  'toast.saveFailed': '保存失败,请重试',
   'toast.nodeDeleted': '已删除 {count} 个节点',
   'toast.runningAll': '开始执行 {count} 个节点',
   'toast.allComplete': '全部执行完成',

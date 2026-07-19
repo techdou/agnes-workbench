@@ -61,14 +61,33 @@ export async function deleteProject(id: string): Promise<void> {
 }
 
 // ---------- 创建项目(返回 server 生成的 id) ----------
+// 可选带入初始 nodes/edges(模板/导入/复制 用)
 
-export async function createProject(name: string): Promise<Project> {
+export async function createProject(
+  name: string,
+  initial?: { nodes?: Node[]; edges?: Edge[] }
+): Promise<Project> {
   const resp = await fetch('/api/projects', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({
+      name,
+      nodes: initial?.nodes ?? [],
+      edges: initial?.edges ?? [],
+    }),
   });
   if (!resp.ok) throw new Error(`创建项目失败: ${resp.status}`);
   const data = await resp.json();
   return data.project as Project;
+}
+
+// ---------- 重命名项目(只改 name,不动画布) ----------
+
+export async function renameProject(id: string, name: string): Promise<void> {
+  const resp = await fetch(`/api/projects/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!resp.ok) throw new Error(`重命名项目失败: ${resp.status}`);
 }

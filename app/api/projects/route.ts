@@ -28,19 +28,23 @@ export async function GET() {
 }
 
 // ---------- 创建项目 ----------
+// 支持创建时带入初始画布(模板/导入/复制 都走这里)
 export async function POST(req: NextRequest) {
   const session = await requireUser();
   if (isAuthError(session)) return session;
 
   const body = await req.json().catch(() => ({}));
   const name = (body.name as string)?.trim() || '未命名项目';
+  // 可选:初始 nodes/edges(用于从模板创建、导入工作流、复制项目)
+  const initialNodes = Array.isArray(body.nodes) ? body.nodes : [];
+  const initialEdges = Array.isArray(body.edges) ? body.edges : [];
 
   const project = await prisma.project.create({
     data: {
       userId: session.user.id,
       name,
-      nodes: [],
-      edges: [],
+      nodes: initialNodes,
+      edges: initialEdges,
     },
   });
 

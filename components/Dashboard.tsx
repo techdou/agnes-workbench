@@ -3,7 +3,7 @@
 // 首页 Dashboard —— 项目卡片列表 + 新建/导入/设置
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { getAllProjects, saveProject, type Project } from '@/lib/db';
+import { getAllProjects, createProject as apiCreateProject, type Project } from '@/lib/db';
 import { useFlowStore } from '@/lib/store';
 import { useSettings } from '@/lib/settings';
 import { useTranslation } from '@/lib/i18n';
@@ -55,8 +55,6 @@ export function Dashboard() {
   // 从模板创建项目
   async function createFromTemplate(template: WorkflowTemplate) {
     const { genId } = await import('@/lib/store');
-    const id = genId('proj');
-    const now = new Date().toISOString();
     // 深拷贝模板的 nodes/edges,重新生成 id 避免冲突
     const idMap = new Map<string, string>();
     const nodes = template.nodes.map((n) => {
@@ -70,17 +68,14 @@ export function Dashboard() {
       source: idMap.get(e.source) || e.source,
       target: idMap.get(e.target) || e.target,
     }));
-    const project: Project = {
-      id,
-      name: t(template.nameKey),
-      nodes,
-      edges,
-      createdAt: now,
-      updatedAt: now,
-    };
-    await saveProject(project);
-    pushToast(t('toast.projectCreated'), 'success');
-    router.push(`/canvas/${id}`);
+    try {
+      // 服务端创建项目并带入画布
+      const project = await apiCreateProject(t(template.nameKey), { nodes, edges });
+      pushToast(t('toast.projectCreated'), 'success');
+      router.push(`/canvas/${project.id}`);
+    } catch {
+      pushToast('创建项目失败', 'error');
+    }
   }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -91,21 +86,17 @@ export function Dashboard() {
       pushToast(result.error || t('toast.importFailed'), 'error');
       return;
     }
-    // 创建新项目
-    const { genId } = await import('@/lib/store');
-    const id = genId('proj');
-    const now = new Date().toISOString();
-    const project: Project = {
-      id,
-      name: result.project.name,
-      nodes: result.project.nodes,
-      edges: result.project.edges,
-      createdAt: now,
-      updatedAt: now,
-    };
-    await saveProject(project);
-    pushToast(t('toast.workflowImported', { name: project.name }), 'success');
-    await refresh();
+    try {
+      // 服务端创建项目
+      const project = await apiCreateProject(result.project.name, {
+        nodes: result.project.nodes,
+        edges: result.project.edges,
+      });
+      pushToast(t('toast.workflowImported', { name: project.name }), 'success');
+      await refresh();
+    } catch {
+      pushToast('导入失败', 'error');
+    }
     // 清空 input,允许重复导入同一文件
     e.target.value = '';
   }

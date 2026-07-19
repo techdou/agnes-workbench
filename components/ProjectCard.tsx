@@ -7,7 +7,7 @@ import type { Project } from '@/lib/db';
 import { useTranslation } from '@/lib/i18n';
 import { useToast } from '@/lib/useToast';
 import { exportWorkflow } from '@/lib/workflow-io';
-import { deleteProject as dbDeleteProject } from '@/lib/db';
+import { deleteProject as dbDeleteProject, renameProject, createProject } from '@/lib/db';
 
 interface ProjectCardProps {
   project: Project;
@@ -32,11 +32,14 @@ export function ProjectCard({ project, onDeleted }: ProjectCardProps) {
   const commitName = async () => {
     const trimmed = name.trim();
     if (trimmed && trimmed !== project.name) {
-      // 更新 IndexedDB
-      await import('@/lib/db').then(({ saveProject }) =>
-        saveProject({ ...project, name: trimmed, updatedAt: new Date().toISOString() })
-      );
-      pushToast(t('toast.projectRenamed'), 'success');
+      try {
+        // 只改 name,不动 nodes/edges(避免用列表页的空 nodes 清空画布)
+        await renameProject(project.id, trimmed);
+        pushToast(t('toast.projectRenamed'), 'success');
+      } catch {
+        pushToast(t('toast.saveFailed'), 'error');
+        setName(project.name);
+      }
     } else {
       setName(project.name);
     }
@@ -57,19 +60,23 @@ export function ProjectCard({ project, onDeleted }: ProjectCardProps) {
   };
 
   const handleDuplicate = async () => {
-    const { saveProject } = await import('@/lib/db');
-    const { genId } = await import('@/lib/store');
-    const now = new Date().toISOString();
-    await saveProject({
-      ...project,
-      id: genId('proj'),
-      name: `${project.name} (copy)`,
-      createdAt: now,
-      updatedAt: now,
-    });
-    pushToast(t('dashboard.card.duplicate'), 'success');
-    setMenuOpen(false);
-    onDeleted(); // 刷新列表
+    try {
+      // 走 POST 创建新项目,服务端生成 ID 并带入画布
+      // 注意:列表页 project.nodes/edges 是空的,需要先拉详情
+      const resp = await fetch(`/api/projects/${project.id}`, { cache: 'no-store' });
+      if (!resp.ok) throw new Error('加载项目失败');
+      const data = await resp.json();
+      const fullProject = data.project as Project;
+      await createProject(`${project.name} (copy)`, {
+        nodes: fullProject.nodes,
+        edges: fullProject.edges,
+      });
+      pushToast(t('dashboard.card.duplicate'), 'success');
+      setMenuOpen(false);
+      onDeleted(); // 刷新列表
+    } catch {
+      pushToast(t('toast.saveFailed'), 'error');
+    }
   };
 
   const nodeCount = project.nodes?.length ?? 0;

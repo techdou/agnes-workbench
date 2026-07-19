@@ -144,6 +144,7 @@ const en = {
   'toast.projectCreated': 'Project created',
   'toast.projectDeleted': 'Project deleted',
   'toast.projectRenamed': 'Project renamed',
+  'toast.saveFailed': 'Save failed, please retry',
   'toast.nodeDeleted': 'Deleted {count} nodes',
   'toast.runningAll': 'Running {count} nodes',
   'toast.allComplete': 'All nodes complete',
