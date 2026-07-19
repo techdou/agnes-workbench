@@ -101,44 +101,51 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
-  // 先读现有设置再合并
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { settings: true, agnesKeyEnc: true },
+  // 事务:settings 字段用 PostgreSQL jsonb || 原子 shallow merge,
+  // 防止并发 PATCH 互相覆盖(各自只覆盖自己的字段)
+  // apiKey 单独加密存储,不走 jsonb merge
+  let agnesKeyEncAfter: string | null | undefined;
+  await prisma.$transaction(async (tx) => {
+    if (Object.keys(settingsPatch).length > 0) {
+      // settings || $1::jsonb 做字段级合并(后者覆盖前者)
+      await tx.$executeRaw`
+        UPDATE "User" SET settings = COALESCE(settings, '{}'::jsonb) || ${JSON.stringify(settingsPatch)}::jsonb
+        WHERE id = ${session.user.id}
+      `;
+    }
+
+    // 处理 apiKey:空字符串 = 清除,非空 = 加密存储
+    if (apiKey !== undefined) {
+      const enc = apiKey === '' ? null : encrypt(apiKey);
+      await tx.user.update({
+        where: { id: session.user.id },
+        data: { agnesKeyEnc: enc },
+        select: { agnesKeyEnc: true },
+      }).then((u) => { agnesKeyEncAfter = u.agnesKeyEnc; });
+    } else {
+      const u = await tx.user.findUnique({
+        where: { id: session.user.id },
+        select: { agnesKeyEnc: true },
+      });
+      agnesKeyEncAfter = u?.agnesKeyEnc;
+    }
   });
-  if (!user) {
+
+  // 事务外回查最终 settings(给客户端返回最新值)
+  const updated = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { settings: true },
+  });
+  if (!updated) {
     return NextResponse.json({ error: '用户不存在' }, { status: 404 });
   }
-
-  const currentSettings = (user.settings || {}) as Partial<ServerSettings>;
-  const mergedSettings = { ...currentSettings, ...settingsPatch };
-
-  // 构建更新数据
-  const updateData: { settings: Partial<ServerSettings>; agnesKeyEnc?: string | null } = {
-    settings: mergedSettings,
-  };
-
-  // 处理 apiKey:空字符串 = 清除,非空 = 加密存储
-  if (apiKey !== undefined) {
-    if (apiKey === '') {
-      updateData.agnesKeyEnc = null;
-    } else {
-      updateData.agnesKeyEnc = encrypt(apiKey);
-    }
-  }
-
-  const updated = await prisma.user.update({
-    where: { id: session.user.id },
-    data: updateData,
-    select: { settings: true, agnesKeyEnc: true },
-  });
 
   // 返回时同样不暴露明文
   let hasApiKey = false;
   let apiKeyHint = '';
-  if (updated.agnesKeyEnc) {
+  if (agnesKeyEncAfter) {
     try {
-      apiKeyHint = maskKey(decrypt(updated.agnesKeyEnc));
+      apiKeyHint = maskKey(decrypt(agnesKeyEncAfter));
       hasApiKey = true;
     } catch {
       hasApiKey = false;

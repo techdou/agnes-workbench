@@ -70,12 +70,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
 
   callbacks: {
-    // 登录时:把 role + id 写入 JWT
-    jwt({ token, user }) {
+    // JWT 回调:登录时写入初值,后续每次轮转从 DB 刷新 role/disabled
+    // 这样管理员禁用账号 / 改角色后,JWT 老用户也能尽快生效
+    // (代价:每次 jwt 回调查一次 DB;用 select 限定字段降低开销)
+    async jwt({ token, user }) {
       if (user) {
         token.role = (user as { role?: 'USER' | 'ADMIN' }).role;
         token.id = user.id;
+        return token;
       }
+      // 已有 token(非登录时):回查 DB 校验当前状态
+      if (!token.id) return token;
+      const latest = await prisma.user.findUnique({
+        where: { id: token.id },
+        select: { role: true, disabled: true },
+      });
+      // 账号已删除或被禁用 → 清空 token,等价于登出
+      if (!latest || latest.disabled) {
+        return {} as typeof token;
+      }
+      token.role = latest.role;
       return token;
     },
     // 每次读 session:把 JWT 里的 role + id 映射到 session.user

@@ -1,0 +1,2 @@
+# Prisma migration lock —— 锁定数据库 provider
+provider = "postgresql"

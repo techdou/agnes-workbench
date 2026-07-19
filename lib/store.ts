@@ -213,13 +213,29 @@ function scheduleAutoSave() {
   if (saveTimer) clearTimeout(saveTimer);
   useFlowStore.getState().setSaveStatus('saving');
   saveTimer = setTimeout(async () => {
-    await useFlowStore.getState().persistCurrentProject();
+    saveTimer = null;
+    try {
+      await useFlowStore.getState().persistCurrentProject();
+    } catch {
+      // 保存失败:setSaveStatus('error') 由 persistCurrentProject 内部处理
+      useFlowStore.getState().setSaveStatus('error');
+    }
   }, 1500);
+}
+
+// 切换项目前调用:清除挂起的 timer,避免跨项目写入污染
+// 注意:不等待 pending persist,因为 currentProjectId 立即变化会导致
+// persist 读到新项目状态。挂起的 timer 已被 clear,不会再触发。
+function flushPendingSaveTimer() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
 }
 
 // ---------- Store ----------
 
-type SaveStatus = 'idle' | 'saving' | 'saved';
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 interface FlowState {
   nodes: Node[];
@@ -446,6 +462,8 @@ export const useFlowStore = create<FlowState>()(
   // ---------- 项目制 ----------
 
   createProject: async (name) => {
+    // 切换前先清挂起的 autosave timer,防跨项目写入污染
+    flushPendingSaveTimer();
     // 服务端创建项目,拿回 server 生成的 ID
     const { createProject: apiCreateProject } = await import('./db');
     const project = await apiCreateProject(name);
@@ -462,6 +480,8 @@ export const useFlowStore = create<FlowState>()(
   },
 
   loadProject: async (id) => {
+    // 切换前先清挂起的 autosave timer
+    flushPendingSaveTimer();
     const project = await getProject(id);
     if (!project) return false;
     // [M4] 加载项目时重置所有 running 状态为 idle
@@ -489,7 +509,6 @@ export const useFlowStore = create<FlowState>()(
     const { currentProjectId, currentProjectName, nodes, edges } = get();
     if (!currentProjectId) return;
     // 缩略图:取画布里第一张生成结果的 cachedUrl(图片优先,视频次之)
-    // 不用 html-to-image 那种重依赖,用内容本身的缩略图更直观
     const thumbnail = pickThumbnail(nodes);
     const project: Project = {
       id: currentProjectId,
@@ -500,8 +519,14 @@ export const useFlowStore = create<FlowState>()(
       createdAt: new Date().toISOString(), // PUT 不用这个,但类型需要
       updatedAt: new Date().toISOString(),
     };
-    await saveProject(project);
-    set({ saveStatus: 'saved' });
+    try {
+      await saveProject(project);
+      set({ saveStatus: 'saved' });
+    } catch {
+      // API 调用失败:标记 error 态,UI 可显示"保存失败,请重试"
+      set({ saveStatus: 'error' });
+      throw new Error('persist failed');
+    }
   },
 
   setSaveStatus: (s) => set({ saveStatus: s }),
