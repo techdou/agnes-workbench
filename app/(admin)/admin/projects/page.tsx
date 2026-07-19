@@ -2,7 +2,7 @@
 
 // 管理员:项目浏览(只读)
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from '@/lib/i18n';
 import Link from 'next/link';
 
@@ -27,21 +27,21 @@ export default function AdminProjectsPage() {
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (search) params.set('search', search);
-    const resp = await fetch(`/api/admin/projects?${params}`);
-    if (resp.ok) {
-      const data = await resp.json();
-      setProjects(data.projects);
-    }
-    setLoading(false);
-  }, [search]);
-
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    (async () => {
+      const params = new URLSearchParams();
+      if (search) params.set('search', search);
+      const resp = await fetch(`/api/admin/projects?${params}`);
+      if (cancelled) return;
+      if (resp.ok) {
+        const data = await resp.json();
+        if (!cancelled) setProjects(data.projects);
+      }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [search]);
 
   return (
     <div>
@@ -97,10 +97,7 @@ export default function AdminProjectsPage() {
                 </td>
               </tr>
             ) : (
-              projects.filter((p) => !search ||
-                p.name.toLowerCase().includes(search.toLowerCase()) ||
-                p.user.email.toLowerCase().includes(search.toLowerCase())
-              ).map((p) => (
+              projects.map((p) => (
                 <tr key={p.id} style={{ borderBottom: '1px solid var(--c-edge)' }}>
                   <Td style={{ color: 'var(--c-text)' }}>{p.name}</Td>
                   <Td style={{ color: 'var(--c-text-dim)' }}>{p.user.email}</Td>

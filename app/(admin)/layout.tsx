@@ -1,9 +1,10 @@
 // (admin) 布局 —— 需管理员才能访问
-// Server Component:await auth() 校验
+// Server Component:await auth() 校验,SessionProvider 让客户端 useSession 可用
 
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { AdminShell } from '@/components/AdminShell';
+import { SessionProvider } from '@/components/SessionProvider';
 
 export default async function AdminLayout({
   children,
@@ -18,5 +19,9 @@ export default async function AdminLayout({
     redirect('/');
   }
 
-  return <AdminShell>{children}</AdminShell>;
+  return (
+    <SessionProvider session={session}>
+      <AdminShell>{children}</AdminShell>
+    </SessionProvider>
+  );
 }

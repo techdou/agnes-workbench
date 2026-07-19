@@ -26,7 +26,6 @@ export default function AdminUsersPage() {
   const [searchInput, setSearchInput] = useState('');
 
   const load = useCallback(async () => {
-    setLoading(true);
     const params = new URLSearchParams();
     if (search) params.set('search', search);
     const resp = await fetch(`/api/admin/users?${params}`);
@@ -38,8 +37,20 @@ export default function AdminUsersPage() {
   }, [search]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    (async () => {
+      const params = new URLSearchParams();
+      if (search) params.set('search', search);
+      const resp = await fetch(`/api/admin/users?${params}`);
+      if (cancelled) return;
+      if (resp.ok) {
+        const data = await resp.json();
+        if (!cancelled) setUsers(data.users);
+      }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [search]);
 
   async function patchUser(id: string, patch: Partial<Pick<AdminUser, 'role' | 'disabled'>>) {
     const resp = await fetch(`/api/admin/users/${id}`, {

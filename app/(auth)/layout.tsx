@@ -2,6 +2,7 @@
 // 已登录用户自动跳转到首页
 
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { auth } from '@/auth';
 
 export default async function AuthLayout({
@@ -20,7 +21,7 @@ export default async function AuthLayout({
       style={{ background: 'var(--c-void)' }}
     >
       {/* Logo */}
-      <a href="/" className="mb-8 flex items-center gap-2 no-underline">
+      <Link href="/" className="mb-8 flex items-center gap-2 no-underline">
         <span className="font-mono text-2xl" style={{ color: 'var(--c-phosphor)' }}>
           Ψ
         </span>
@@ -30,7 +31,7 @@ export default async function AuthLayout({
         >
           Phosphor Studio
         </span>
-      </a>
+      </Link>
       {children}
     </div>
   );
