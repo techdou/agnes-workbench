@@ -76,12 +76,16 @@ export function NodeCreator({ sourceType, sourceId, screenPos, flowPos, onClose 
       {/* 背景遮罩:点外面关闭 */}
       <div className="fixed inset-0 z-[95]" onClick={onClose} />
 
-      {/* 弹出面板:定位在鼠标松开处 */}
+      {/* 弹出面板:桌面用鼠标松开位置,窄屏强制居中避免贴边 */}
       <div
-        className="fixed z-[96] w-64 overflow-hidden rounded-lg border shadow-2xl"
+        className="fixed z-[96] w-[92vw] max-w-[280px] overflow-hidden rounded-lg border shadow-2xl sm:w-64"
         style={{
-          left: Math.min(screenPos.x, window.innerWidth - 280),
-          top: Math.min(screenPos.y, window.innerHeight - 340),
+          left: typeof window !== 'undefined' && window.innerWidth < 640
+            ? `${(window.innerWidth - Math.min(window.innerWidth - 24, 280)) / 2}px`
+            : Math.min(screenPos.x, window.innerWidth - 280),
+          top: typeof window !== 'undefined' && window.innerHeight < 640
+            ? `${Math.max(80, window.innerHeight / 4)}px`
+            : Math.min(screenPos.y, window.innerHeight - 340),
           borderColor: 'var(--c-line)',
           background: 'var(--c-ink)',
           animation: 'fade-up 0.12s ease-out',
@@ -134,7 +138,7 @@ export function NodeCreator({ sourceType, sourceId, screenPos, flowPos, onClose 
                         key={item.type}
                         onClick={() => create(item.type)}
                         onMouseEnter={() => setActiveIdx(idx)}
-                        className="flex w-full items-center gap-2.5 rounded px-2 py-1.5 text-left transition-colors"
+                        className="flex w-full items-center gap-2.5 rounded px-2 py-2 text-left transition-colors sm:py-1.5"
                         style={{
                           background: isActive ? 'color-mix(in srgb, var(--c-phosphor) 12%, transparent)' : 'transparent',
                           borderLeft: `2px solid ${isActive ? 'var(--c-phosphor)' : 'transparent'}`,

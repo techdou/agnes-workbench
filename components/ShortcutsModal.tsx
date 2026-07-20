@@ -29,9 +29,19 @@ export function ShortcutsModal({ onClose }: ShortcutsModalProps) {
     { keys: '?', labelKey: 'shortcuts.shortcutList' },
   ];
 
+  // 移动端手势列表(无键盘时展示触屏操作)
+  const gestures: { keys: string; labelKey: string }[] = [
+    { keys: t('mobile.gesture.oneFingerDrag'), labelKey: 'mobile.gesture.pan' },
+    { keys: t('mobile.gesture.twoFingerPinch'), labelKey: 'mobile.gesture.zoom' },
+    { keys: t('mobile.gesture.longPressNode'), labelKey: 'mobile.gesture.nodeMenu' },
+    { keys: t('mobile.gesture.longPressPane'), labelKey: 'mobile.gesture.addNode' },
+    { keys: t('mobile.gesture.tapMultiSelect'), labelKey: 'mobile.gesture.multiSelect' },
+    { keys: t('mobile.gesture.dragHandle'), labelKey: 'mobile.gesture.connect' },
+  ];
+
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4"
       style={{ background: 'rgba(10,14,20,0.75)', backdropFilter: 'blur(12px)' }}
       onClick={onClose}
     >
@@ -47,28 +57,52 @@ export function ShortcutsModal({ onClose }: ShortcutsModalProps) {
           </h2>
           <button
             onClick={onClose}
-            className="rounded p-1 font-mono text-sm transition-colors hover:bg-white/5"
+            className="touch-target-44 flex items-center justify-center rounded p-1 font-mono text-sm transition-colors hover:bg-white/5"
             style={{ color: 'var(--c-text-faint)' }}
+            aria-label={t('common.close')}
           >
             ✕
           </button>
         </div>
 
-        {/* 列表 */}
-        <div className="p-5">
-          {shortcuts.map((s) => (
-            <div key={s.labelKey} className="flex items-center justify-between py-2">
-              <span className="text-[13px]" style={{ color: 'var(--c-text-dim)' }}>
-                {t(s.labelKey)}
-              </span>
-              <kbd
-                className="rounded border px-2 py-1 font-mono text-[11px]"
-                style={{ borderColor: 'var(--c-line)', background: 'var(--c-void)', color: 'var(--c-text)' }}
-              >
-                {s.keys}
-              </kbd>
-            </div>
-          ))}
+        {/* 列表:桌面端键盘快捷键 / 移动端手势说明 */}
+        <div className="p-4 sm:p-5">
+          {/* 移动端手势说明 */}
+          <div className="mb-4 sm:hidden">
+            <p className="mb-2 font-mono text-[9px] tracking-[0.2em]" style={{ color: 'var(--c-text-faint)' }}>
+              {t('mobile.gestures.title')}
+            </p>
+            {gestures.map((g) => (
+              <div key={g.labelKey} className="flex items-center justify-between gap-3 py-2">
+                <span className="text-[12px]" style={{ color: 'var(--c-text-dim)' }}>
+                  {t(g.labelKey)}
+                </span>
+                <span
+                  className="shrink-0 rounded border px-2 py-1 font-mono text-[10px]"
+                  style={{ borderColor: 'var(--c-line)', background: 'var(--c-void)', color: 'var(--c-text)' }}
+                >
+                  {g.keys}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* 桌面端键盘快捷键 */}
+          <div className="hidden sm:block">
+            {shortcuts.map((s) => (
+              <div key={s.labelKey} className="flex items-center justify-between py-2">
+                <span className="text-[13px]" style={{ color: 'var(--c-text-dim)' }}>
+                  {t(s.labelKey)}
+                </span>
+                <kbd
+                  className="rounded border px-2 py-1 font-mono text-[11px]"
+                  style={{ borderColor: 'var(--c-line)', background: 'var(--c-void)', color: 'var(--c-text)' }}
+                >
+                  {s.keys}
+                </kbd>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

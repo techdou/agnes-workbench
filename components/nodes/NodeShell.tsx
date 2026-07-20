@@ -66,7 +66,7 @@ export function NodeShell({
 
   return (
     <div
-      className="phosphor-node group relative w-[300px] overflow-hidden rounded-md border shadow-[0_8px_32px_rgba(0,0,0,0.4)] backdrop-blur-sm transition-all duration-200"
+      className="phosphor-node group relative w-[280px] overflow-hidden rounded-md border shadow-[0_8px_32px_rgba(0,0,0,0.4)] backdrop-blur-sm transition-all duration-200 sm:w-[300px]"
       style={{ borderColor: 'var(--c-edge)', background: 'var(--c-ink)' }}
     >
       {/* [优化1] 左侧类型色条 —— 3px 宽,贯穿整个节点高度 */}
@@ -139,7 +139,7 @@ export function NodeShell({
             // running + 有取消回调:显示 CANCEL 按钮(可点击)
             <button
               onClick={onCancel}
-              className="w-full rounded border px-3 py-1.5 font-mono text-[11px] font-medium tracking-[0.1em] transition-all"
+              className="w-full rounded border px-3 py-2 font-mono text-[11px] font-medium tracking-[0.1em] transition-all sm:py-1.5"
               style={{
                 borderColor: 'color-mix(in srgb, var(--c-rust) 50%, transparent)',
                 background: 'color-mix(in srgb, var(--c-rust) 12%, transparent)',
@@ -155,7 +155,7 @@ export function NodeShell({
             <button
               onClick={onRun}
               disabled={status === 'running'}
-              className="group relative w-full overflow-hidden rounded border px-3 py-1.5 font-mono text-[11px] font-medium tracking-[0.1em] transition-all disabled:cursor-not-allowed disabled:opacity-40"
+              className="group relative w-full overflow-hidden rounded border px-3 py-2 font-mono text-[11px] font-medium tracking-[0.1em] transition-all disabled:cursor-not-allowed disabled:opacity-40 sm:py-1.5"
               style={{
                 borderColor: 'color-mix(in srgb, var(--c-amber) 50%, transparent)',
                 background: 'color-mix(in srgb, var(--c-amber) 10%, transparent)',
