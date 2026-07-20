@@ -161,6 +161,19 @@ const en = {
   'archive.loadFailed': 'Load failed',
   'archive.retry': 'Retry',
   'archive.noPrompt': '(no prompt)',
+  'archive.favorite': 'Favorite',
+  'archive.unfavorite': 'Unfavorite',
+  'archive.favoritedOnly': 'Favorites only',
+
+  // Global gallery (/gallery)
+  'gallery.title': 'Gallery',
+  'gallery.subtitle': 'Favorited works from all projects',
+  'gallery.empty': 'Gallery is empty',
+  'gallery.emptyDesc': 'Favorite works in any project archive and they will appear here',
+  'gallery.howTo': 'Tap ☆ in any project archive → works show up here',
+  'gallery.imgCount': 'Images',
+  'gallery.vidCount': 'Videos',
+  'gallery.openProject': 'Open original project',
 
   // Settings
   'settings.title': 'Settings',

@@ -159,6 +159,8 @@ export interface ManifestEntry {
   prompt?: string;
   createdAt: string;
   projectId?: string; // 归属项目(画廊按项目隔离)
+  favorited?: boolean; // ★ 是否收藏(全局画廊用)
+  favoritedAt?: string; // 收藏时间(用于跨项目排序)
 }
 
 export interface Manifest {
@@ -295,16 +297,47 @@ export async function getEntryByHash(hash: string): Promise<ManifestEntry | unde
   return manifest.entries[hash];
 }
 
-// 列出条目(按时间倒序,可按 projectId 过滤)
-export async function listEntries(projectId?: string): Promise<ManifestEntry[]> {
+// 列出条目(按时间倒序)
+// - projectId 过滤本项目归档
+// - onlyFavorited 只看收藏(跨项目,用于 /gallery)
+export async function listEntries(
+  projectId?: string,
+  onlyFavorited?: boolean
+): Promise<ManifestEntry[]> {
   const manifest = await loadManifest();
   let entries = Object.values(manifest.entries);
   if (projectId) {
     entries = entries.filter((e) => e.projectId === projectId);
   }
-  return entries.sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
+  if (onlyFavorited) {
+    entries = entries.filter((e) => e.favorited === true);
+  }
+  // 收藏视图按 favoritedAt 排序(最近收藏在前),普通视图按 createdAt
+  const sortKey = onlyFavorited ? 'favoritedAt' : 'createdAt';
+  return entries.sort((a, b) => {
+    const ta = new Date((a[sortKey] as string | undefined) || a.createdAt).getTime();
+    const tb = new Date((b[sortKey] as string | undefined) || b.createdAt).getTime();
+    return tb - ta;
+  });
+}
+
+/**
+ * 切换某条目的收藏状态(给 PATCH /api/cache/[hash] 用)
+ * 返回切换后的状态;若条目不存在抛错
+ */
+export async function setFavorited(
+  hash: string,
+  favorited: boolean
+): Promise<ManifestEntry> {
+  return withManifestLock(async () => {
+    const manifest = await loadManifest();
+    const entry = manifest.entries[hash];
+    if (!entry) throw new Error(`hash ${hash} 未找到,无法切换收藏`);
+    entry.favorited = favorited;
+    entry.favoritedAt = favorited ? new Date().toISOString() : undefined;
+    await saveManifest(manifest);
+    return entry;
+  });
 }
 
 /**

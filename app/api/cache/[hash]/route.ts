@@ -1,7 +1,7 @@
-// 缓存代理:GET 按 hash 取本地文件
-// (POST 缓存提交已统一到 /api/cache/item,这里只负责读)
+// 缓存代理:GET 按 hash 取本地文件,PATCH 切换收藏
+// (POST 缓存提交已统一到 /api/cache/item)
 import { NextRequest, NextResponse } from 'next/server';
-import { getEntryByHash, LIBRARY_DIR, assertSafeLocalPath } from '@/lib/cache';
+import { getEntryByHash, setFavorited, LIBRARY_DIR, assertSafeLocalPath } from '@/lib/cache';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -52,5 +52,34 @@ export async function GET(
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+// PATCH /api/cache/[hash] —— 切换收藏状态
+// body: { favorited: boolean }
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ hash: string }> }
+) {
+  try {
+    const { hash } = await params;
+    if (!/^[0-9a-f]{1,32}$/.test(hash)) {
+      return NextResponse.json({ error: '非法 hash' }, { status: 400 });
+    }
+    const body = await req.json().catch(() => ({}));
+    const favorited = body.favorited;
+    if (typeof favorited !== 'boolean') {
+      return NextResponse.json({ error: 'favorited 必须是 boolean' }, { status: 400 });
+    }
+    const entry = await setFavorited(hash, favorited);
+    return NextResponse.json({
+      hash: entry.hash,
+      favorited: entry.favorited,
+      favoritedAt: entry.favoritedAt,
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const status = /未找到/.test(msg) ? 404 : 500;
+    return NextResponse.json({ error: msg }, { status });
   }
 }
