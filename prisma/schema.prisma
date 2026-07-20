@@ -62,10 +62,15 @@ model MediaAsset {
   prompt       String?
   createdAt    DateTime @default(now())
 
+  // ★ 收藏标记 + 时间(全局画廊用,跨项目按 favoritedAt 排序)
+  favorited    Boolean   @default(false)
+  favoritedAt  DateTime?
+
   // 多用户场景下同一 URL 各用户独立访问权:按 (userId, hash) 唯一
   // 文件物理去重通过 localPath 实现,这里 DB 行按用户隔离
   @@unique([userId, hash])
   @@index([userId])
   @@index([projectId])
   @@index([hash])
+  @@index([userId, favorited]) // 全局画廊:某用户的收藏列表
 }
