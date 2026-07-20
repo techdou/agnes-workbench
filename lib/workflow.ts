@@ -6,6 +6,11 @@
 
 import type { Edge, Node } from '@xyflow/react';
 
+// 视频类节点类型(其 resultUrl 是视频)——单一定义,store 和本文件复用
+export const VIDEO_NODE_TYPES = new Set([
+  'textToVideo', 'imageToVideo', 'multiImageVideo', 'keyframe', 'videoPreview',
+]);
+
 // 从目标节点向上游回溯,返回所有需要先执行的节点(拓扑顺序)
 export function getUpstreamNodes(
   nodes: Node[],
@@ -70,10 +75,6 @@ export function collectUpstreamOutputs(
 ): { texts: string[]; images: string[]; videos: string[] } {
   const result = { texts: [] as string[], images: [] as string[], videos: [] as string[] };
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-  // 视频类节点类型(其 resultUrl 是视频)
-  const VIDEO_NODE_TYPES = new Set([
-    'textToVideo', 'imageToVideo', 'multiImageVideo', 'keyframe', 'videoPreview',
-  ]);
   for (const e of edges) {
     if (e.target !== targetId) continue;
     const src = nodeMap.get(e.source);

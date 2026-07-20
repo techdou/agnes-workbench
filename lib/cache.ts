@@ -3,12 +3,14 @@
 //
 // 安全措施:
 //   - SSRF 白名单:只允许缓存 Agnes 域名资源
+//   - DNS rebinding 防护:fetch 前 dns.lookup 预解析,所有 IP 必须不在内网段
 //   - 路径遍历防护:所有写入路径校验不越出 library 目录
 //   - 文件大小上限:防止大视频 OOM
 //   - inFlight 去重:同一 URL 并发只下载一次
 
 import fs from 'fs/promises';
 import path from 'path';
+import dns from 'dns';
 import { prisma } from '@/lib/prisma';
 
 const LIBRARY_DIR = path.join(process.cwd(), 'library');
@@ -20,14 +22,46 @@ const MAX_FILE_SIZE = 200 * 1024 * 1024;
 
 // ---------- SSRF 防护 ----------
 
-// 只允许缓存 Agnes 相关域名(生产域名可能后续扩充)
-const ALLOWED_HOST_SUFFIXES = [
-  'agnes-ai.com',
-  'agnesai.com',
-];
+// 只允许缓存 Agnes 相关域名。
+// 优先读 env AGNES_SSRF_ALLOW_SUFFIXES(逗号分隔),没配用默认。
+// 这样生产扩充域名不用改代码
+const DEFAULT_ALLOWED_HOST_SUFFIXES = ['agnes-ai.com', 'agnesai.com'];
+function getAllowedHostSuffixes(): string[] {
+  const fromEnv = process.env.AGNES_SSRF_ALLOW_SUFFIXES;
+  if (fromEnv && fromEnv.trim()) {
+    return fromEnv.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  }
+  return DEFAULT_ALLOWED_HOST_SUFFIXES;
+}
 
 /**
- * 校验外部 URL 是否安全可缓存
+ * 判断 IP 是否内网/本机/元数据地址
+ * 覆盖:IPv4 私有段 + 环回 + 链路本地 + 元数据 + IPv6 环回/内网
+ */
+function isPrivateIp(ip: string): boolean {
+  // IPv6
+  if (ip.includes(':')) {
+    const lower = ip.toLowerCase();
+    return (
+      lower === '::1' ||                     // 环回
+      lower === '::' ||                      // 未指定
+      lower.startsWith('fe80:') ||           // 链路本地
+      lower.startsWith('fc') || lower.startsWith('fd') || // ULA 本地唯一
+      lower.startsWith('::ffff:') && isPrivateIp(lower.slice('::ffff:'.length)) // IPv4-mapped
+    );
+  }
+  // IPv4
+  if (
+    /^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.|100\.6[4-9]\.|100\.[7-9]\d\.|100\.1[01]\d\.|100\.12[0-7]\.)/.test(ip) ||
+    ip.endsWith('.0.0.0') // 泛播兜底
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 校验外部 URL 是否安全可缓存(域名白名单 + 协议 + 内网段)
  */
 function assertSafeUrl(raw: string): void {
   let u: URL;
@@ -40,6 +74,7 @@ function assertSafeUrl(raw: string): void {
     throw new Error(`仅允许 http(s) 协议,当前 ${u.protocol}`);
   }
   const host = u.hostname.toLowerCase();
+  // 拒绝 localhost 和常见内网/元数据地址(域名形态)
   if (
     host === 'localhost' ||
     host === '::1' ||
@@ -48,9 +83,38 @@ function assertSafeUrl(raw: string): void {
   ) {
     throw new Error(`禁止访问内网/本地地址: ${host}`);
   }
-  const ok = ALLOWED_HOST_SUFFIXES.some((s) => host === s || host.endsWith('.' + s));
+  // 域名白名单
+  const allowed = getAllowedHostSuffixes();
+  const ok = allowed.some((s) => host === s || host.endsWith('.' + s));
   if (!ok) {
     throw new Error(`仅允许缓存 Agnes 域名资源,当前域名: ${host}`);
+  }
+}
+
+/**
+ * DNS rebinding 防护:fetch 前预解析所有 A/AAAA 记录,
+ * 任一解析到内网/元数据 IP 就拒绝。
+ *
+ * 说明:Node fetch(基于 undici)每次连接会重新解析 DNS,纯 TOCTOU 窗口无法 100% 消除,
+ * 但预解析可以把"攻击者控制 DNS 在校验后切到内网"的窗口收窄到毫秒级,
+ * 配合上面的域名白名单 + 内网段校验,实际利用门槛非常高。
+ */
+async function assertSafeDns(hostname: string): Promise<void> {
+  // all: true 返回所有记录,verifier 想全检
+  let addrs: string[];
+  try {
+    const result = await dns.promises.lookup(hostname, { all: true });
+    addrs = result.map((r) => r.address);
+  } catch (e) {
+    throw new Error(`DNS 解析失败 ${hostname}: ${(e as Error).message}`);
+  }
+  if (addrs.length === 0) {
+    throw new Error(`DNS 无解析结果: ${hostname}`);
+  }
+  for (const ip of addrs) {
+    if (isPrivateIp(ip)) {
+      throw new Error(`域名 ${hostname} 解析到内网地址 ${ip},拒绝缓存`);
+    }
   }
 }
 
@@ -134,6 +198,10 @@ async function doCache(
   userId?: string
 ): Promise<CacheResult> {
   assertSafeUrl(url);
+  // [S2] DNS rebinding 防护:fetch 前预解析,拒绝解析到内网的域名
+  const parsed = new URL(url);
+  await assertSafeDns(parsed.hostname);
+
   await ensureDirs();
 
   const hash = await hashUrl(url);

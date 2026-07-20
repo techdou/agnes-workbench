@@ -40,7 +40,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       onClick={onClose}
     >
       <div
-        className="flex max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-lg border shadow-2xl"
+        className="relative flex max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-lg border shadow-2xl"
         style={{ borderColor: 'var(--c-line)', background: 'var(--c-ink)', animation: 'fade-up 0.2s ease-out' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -117,8 +117,10 @@ function ApiTab({ t }: { t: ReturnType<typeof useTranslation> }) {
   const [keyDraft, setKeyDraft] = useState('');
   const [keySaved, setKeySaved] = useState(false);
   const [baseUrlSaved, setBaseUrlSaved] = useState(false);
-  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
+  // [M3] 测试结果分四档:ok(200)/ partial(401|403|429|503,地址通但 key/限流问题)/ fail(其他)/ testing
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'partial' | 'fail'>('idle');
   const [testError, setTestError] = useState<string | null>(null);
+  const [partialMsg, setPartialMsg] = useState<string>('');
 
   async function saveKey() {
     if (!keyDraft.trim()) return;
@@ -147,6 +149,7 @@ function ApiTab({ t }: { t: ReturnType<typeof useTranslation> }) {
   async function testConnection() {
     setTestStatus('testing');
     setTestError(null);
+    setPartialMsg('');
     try {
       const body: Record<string, unknown> = { prompt: 'Hi', maxTokens: 5 };
       if (settings.baseUrl) body.baseUrl = settings.baseUrl;
@@ -156,8 +159,17 @@ function ApiTab({ t }: { t: ReturnType<typeof useTranslation> }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (resp.ok || resp.status === 401 || resp.status === 429 || resp.status === 503) {
+      if (resp.ok) {
+        // 200 = 完全正常
         setTestStatus('ok');
+      } else if (resp.status === 401 || resp.status === 403) {
+        // 鉴权失败:地址能连通,但 key 错/无权限
+        setTestStatus('partial');
+        setPartialMsg(t('settings.api.testOkNoKey'));
+      } else if (resp.status === 429 || resp.status === 503) {
+        // 限流/过载:地址+key 都能连通,只是暂时忙
+        setTestStatus('partial');
+        setPartialMsg(t('settings.api.testOkRateLimited'));
       } else {
         const err = await resp.json().catch(() => ({}));
         setTestStatus('fail');
@@ -251,6 +263,9 @@ function ApiTab({ t }: { t: ReturnType<typeof useTranslation> }) {
       </button>
       {testStatus === 'ok' && (
         <span className="ml-3 font-mono text-[11px]" style={{ color: 'var(--c-phosphor)' }}>✓ {t('settings.api.testOk')}</span>
+      )}
+      {testStatus === 'partial' && (
+        <span className="ml-3 font-mono text-[11px]" style={{ color: 'var(--c-amber)' }}>◐ {partialMsg}</span>
       )}
       {testStatus === 'fail' && (
         <div className="ml-3">

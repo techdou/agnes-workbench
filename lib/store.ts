@@ -17,7 +17,7 @@ import {
   type OnEdgesChange,
   type OnNodesChange,
 } from '@xyflow/react';
-import { getUpstreamNodes, collectUpstreamOutputs } from './workflow';
+import { getUpstreamNodes, collectUpstreamOutputs, VIDEO_NODE_TYPES } from './workflow';
 import { toast } from './useToast';
 import { t } from './i18n';
 import {
@@ -48,11 +48,17 @@ function modelParams(): Record<string, unknown> {
   return params;
 }
 
-// 友好化 API 错误:503/429 等限流错误给中文提示
+// 友好化 API 错误:5xx/限流/鉴权错误给中文提示
 function friendlyApiError(status: number, msg: string): string {
-  if (status === 503) return '服务繁忙,请稍后重试';
-  if (status === 429) return '请求过于频繁,请稍后重试';
   if (status === 401) return 'API Key 无效,请检查设置';
+  if (status === 403) return 'API Key 无访问权限,请检查设置';
+  if (status === 408) return '请求超时,请稍后重试';
+  if (status === 429) return '请求过于频繁,请稍后重试';
+  if (status === 500) return 'Agnes 服务异常,请稍后重试';
+  if (status === 502) return 'Agnes 网关异常,请稍后重试';
+  if (status === 503) return '服务繁忙,请稍后重试';
+  if (status === 504) return 'Agnes 服务超时,请稍后重试';
+  if (status >= 500) return 'Agnes 服务暂不可用,请稍后重试';
   return msg;
 }
 
@@ -250,7 +256,7 @@ interface FlowState {
   addNodeAt: (type: string, position: { x: number; y: number }, data?: Record<string, unknown>) => string;
   addNodeConnected: (type: string, position: { x: number; y: number }, sourceId: string, sourceHandle?: string) => string;
   updateNodeData: (id: string, patch: Record<string, unknown>) => void;
-  runNode: (id: string) => Promise<void>;
+  runNode: (id: string, opts?: { silent?: boolean }) => Promise<void>;
   runAll: () => Promise<void>;
   deleteNode: (id: string) => void;
   deleteNodes: (ids: string[]) => void;
@@ -267,6 +273,8 @@ interface FlowState {
   redo: () => void;
   // 取消节点运行
   cancelNode: (id: string) => void;
+  // [C1] 取消正在进行的 runAll(下次循环检查标志后退出)
+  cancelRunAll: () => void;
   // 断开节点所有连线(给右键菜单用,走 action 才能触发 autosave)
   disconnectNode: (id: string) => void;
 }
@@ -275,6 +283,12 @@ interface FlowState {
 const runningControllers = new Map<string, () => void>();
 // [M3] 运行中的节点 Promise:节点ID → 正在执行的 Promise
 const runningPromises = new Map<string, Promise<void>>();
+
+// [C1] Run All 限流 + 取消
+// Agnes 视频 RPM ≈ 1/分钟,多视频节点自动间隔(留 5s buffer),可被 cancelRunAll 中止
+// 注:store.ts 在 client bundle,env 只能 build 时注入,这里用硬编码便于审查
+const VIDEO_MIN_INTERVAL_MS = 65000;
+let runAllAborted = false;
 
 export const useFlowStore = create<FlowState>()(
   temporal(
@@ -346,10 +360,12 @@ export const useFlowStore = create<FlowState>()(
 
   // [C1] 运行节点:自动先跑完所有上游(拓扑序),再跑自己
   // [M3] 把执行体注册成 Promise 到 runningPromises,供下游 waitForPromise 直接 await
-  runNode: (id) => {
+  // [H2] opts.silent=true 时,上游/自身失败都不弹 toast(避免联动场景多弹)
+  runNode: (id, opts) => {
     // 取消该节点已有的运行
     cancelRun(id);
 
+    const silent = !!opts?.silent;
     const p = (async () => {
       const { nodes, edges } = get();
       // 拓扑排序:拿到需要先跑的上游(不含自己)
@@ -370,29 +386,58 @@ export const useFlowStore = create<FlowState>()(
           }
           continue;
         }
-        await get().runNode(up.id).catch(() => {});
+        // [H2] 联动上游也用 silent,失败只在末端节点弹一次 toast
+        await get().runNode(up.id, { silent: true }).catch(() => {});
       }
 
       // 跑自己
-      await executeNode(id);
+      await executeNode(id, { silent });
     })();
 
     runningPromises.set(id, p);
     return p.finally(() => runningPromises.delete(id));
   },
 
-  // [H9] Run All:按拓扑序跑所有节点
+  // [C1] 视频类节点按 Agnes RPM 限制自动间隔(默认 65s/个),避免触发限流
   runAll: async () => {
     const { nodes, edges } = get();
     // 全图拓扑排序:反复取入度为0的
     const sorted = topologicalSort(nodes, edges);
+    // 统计视频节点个数,只在 >1 个时才提示限流
+    const videoCount = sorted.filter((n) => VIDEO_NODE_TYPES.has(n.type || '')).length;
     toast(t('toast.runningAll', { count: sorted.length }), 'info');
+    if (videoCount > 1) {
+      toast(t('toast.videoRateLimit', { interval: Math.round(VIDEO_MIN_INTERVAL_MS / 1000) }), 'info');
+    }
+
+    // 重置取消标志,开启本轮 runAll
+    runAllAborted = false;
+    let lastVideoStartedAt = 0;
+
     for (const n of sorted) {
+      if (runAllAborted) break;
       const d = n.data as { status?: string };
       if (d.status === 'done') continue;
+
+      // [C1] 视频节点限流:距离上一个视频节点开始不足间隔就 sleep 补足
+      if (VIDEO_NODE_TYPES.has(n.type || '') && lastVideoStartedAt > 0) {
+        const elapsed = Date.now() - lastVideoStartedAt;
+        const wait = VIDEO_MIN_INTERVAL_MS - elapsed;
+        if (wait > 0) {
+          // 分片 sleep(每 200ms 检查一次取消),刷新页面自然中止
+          const deadline = Date.now() + wait;
+          while (Date.now() < deadline) {
+            if (runAllAborted) break;
+            await new Promise((r) => setTimeout(r, Math.min(200, deadline - Date.now())));
+          }
+        }
+      }
+
+      if (runAllAborted) break;
+      if (VIDEO_NODE_TYPES.has(n.type || '')) lastVideoStartedAt = Date.now();
       await get().runNode(n.id);
     }
-    toast(t('toast.allComplete'), 'success');
+    if (!runAllAborted) toast(t('toast.allComplete'), 'success');
   },
 
   deleteNode: (id) => {
@@ -532,8 +577,8 @@ export const useFlowStore = create<FlowState>()(
   setSaveStatus: (s) => set({ saveStatus: s }),
 
   clearAll: () => {
-    // [C3] 取消所有运行
-    for (const id of [...runningControllers.keys()]) cancelRun(id);
+    // [C3] 取消所有运行 + [C1] 取消 runAll
+    get().cancelRunAll();
     set({ nodes: [], edges: [] });
     // [C1] 清空 undo 历史
     useFlowStore.temporal.getState().clear();
@@ -541,11 +586,21 @@ export const useFlowStore = create<FlowState>()(
   },
 
   // 撤销/重做
+  // [C3] 运行期间禁用:running 节点 promise 还在跑,回滚 nodes 会和 executeNode 的
+  // updateNodeData 写入分叉,redo 时状态错乱
   undo: () => {
+    if (runningControllers.size > 0) {
+      toast(t('toast.undoBlockedWhileRunning'), 'info');
+      return;
+    }
     useFlowStore.temporal.getState().undo();
     scheduleAutoSave();
   },
   redo: () => {
+    if (runningControllers.size > 0) {
+      toast(t('toast.redoBlockedWhileRunning'), 'info');
+      return;
+    }
     useFlowStore.temporal.getState().redo();
     scheduleAutoSave();
   },
@@ -553,6 +608,13 @@ export const useFlowStore = create<FlowState>()(
   // [H1] 真正取消节点运行:调内部 cancelRun 设置 cancelled 标志,abort pollVideo
   cancelNode: (id) => {
     cancelRun(id);
+  },
+
+  // [C1] 取消 runAll:设置标志,循环每次迭代 + sleep 分片都会检查
+  cancelRunAll: () => {
+    runAllAborted = true;
+    // 同时取消所有正在跑的节点
+    for (const id of [...runningControllers.keys()]) cancelRun(id);
   },
 
   // [MEDIUM] 断开节点所有连线(走 action 触发 autosave)
@@ -585,12 +647,13 @@ export const useFlowStore = create<FlowState>()(
 
 // ---------- 执行单个节点(内部) ----------
 
-async function executeNode(id: string): Promise<void> {
+async function executeNode(id: string, opts?: { silent?: boolean }): Promise<void> {
   const { nodes, edges, updateNodeData } = useFlowStore.getState();
   const target = nodes.find((n) => n.id === id);
   if (!target) return;
   const nodeType = target.type;
   const settings = useSettings.getState().settings;
+  const silent = !!opts?.silent;
 
   // [C3] 注册取消控制器
   let cancelled = false;
@@ -737,7 +800,8 @@ async function executeNode(id: string): Promise<void> {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     updateNodeData(id, { status: 'error', error: msg });
-    toast(msg, 'error');
+    // [H2/M8] silent 时不弹 toast(联动上游失败只在末端节点报一次)
+    if (!silent) toast(msg, 'error');
   } finally {
     cleanup();
   }

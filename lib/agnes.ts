@@ -163,17 +163,20 @@ export interface ImageResult {
 }
 
 // 从 Agnes 返回结构里提取图片 URL(字段名可能是 url / image_url / data[].url)
+// [L2] 加 http(s) 正则过滤,避免脏字段被当 URL
 function extractImageUrls(data: AgnesJson): string[] {
   const urls: string[] = [];
-  if (typeof data?.url === 'string') urls.push(data.url);
-  if (typeof data?.image_url === 'string') urls.push(data.image_url);
+  const pushIfUrl = (v: unknown) => {
+    if (typeof v === 'string' && /^https?:\/\//i.test(v)) urls.push(v);
+  };
+  pushIfUrl(data?.url);
+  pushIfUrl(data?.image_url);
   if (Array.isArray(data?.data)) {
     for (const item of data.data) {
       if (item && typeof item === 'object') {
         const obj = item as Record<string, unknown>;
-        for (const key of ['url', 'image_url']) {
-          if (typeof obj[key] === 'string') urls.push(obj[key] as string);
-        }
+        pushIfUrl(obj.url);
+        pushIfUrl(obj.image_url);
       }
     }
   }
@@ -365,7 +368,9 @@ export interface VideoStatusResult {
 }
 
 function extractVideoUrl(data: AgnesJson): string | undefined {
-  for (const key of ['video_url', 'url', 'remixed_from_video_id']) {
+  // [H4] 删掉 remixed_from_video_id:语义是"源视频 ID"不是下载 URL,
+  // 服务商哪天把它写成 URL 会把别人的源视频 URL 当下载链接返回
+  for (const key of ['video_url', 'url']) {
     const v = data?.[key];
     if (typeof v === 'string' && /^https?:\/\//.test(v)) return v;
   }
