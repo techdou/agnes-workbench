@@ -41,6 +41,11 @@ const zh = {
   'toolbar.export': '导出工作流',
   'toolbar.archive': '画廊',
   'toolbar.archiveCount': '个作品',
+  'toolbar.undo': '撤销',
+  'toolbar.redo': '重做',
+  'toolbar.runSelected': '运行',
+  'toolbar.multiSelect': '多选',
+  'toolbar.multiSelectExit': '退出多选',
 
   // 节点类型名
   'node.text': '文本',
@@ -231,6 +236,21 @@ const zh = {
   'error.previewNoImage': '预览节点需要上游连接图片',
   'error.videoPreviewNoInput': '视频预览需要上游连接视频生成节点',
   'error.apiKeyMissing': 'AGNES_API_KEY 未配置,请在设置中填写或检查环境变量',
+
+  // 移动端手势说明(ShortcutsModal 窄屏展示)
+  'mobile.gestures.title': '触屏手势',
+  'mobile.gesture.pan': '平移画布',
+  'mobile.gesture.zoom': '缩放画布',
+  'mobile.gesture.nodeMenu': '节点菜单',
+  'mobile.gesture.addNode': '添加节点',
+  'mobile.gesture.multiSelect': '多选模式',
+  'mobile.gesture.connect': '连接节点',
+  'mobile.gesture.oneFingerDrag': '单指拖动',
+  'mobile.gesture.twoFingerPinch': '双指捏合',
+  'mobile.gesture.longPressNode': '长按节点',
+  'mobile.gesture.longPressPane': '长按空白',
+  'mobile.gesture.tapMultiSelect': '点 ⊟ 切换',
+  'mobile.gesture.dragHandle': '拖拽 ●●',
 };
 
 export default zh;

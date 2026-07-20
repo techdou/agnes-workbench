@@ -126,19 +126,19 @@ export function Dashboard() {
         className="relative z-10 border-b backdrop-blur-md"
         style={{ borderColor: 'var(--c-edge)', background: 'color-mix(in srgb, var(--c-void) 95%, transparent)' }}
       >
-        <div className="flex items-center justify-between px-5 py-3">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
+          <div className="flex min-w-0 items-center gap-3">
             <div
-              className="flex h-8 w-8 items-center justify-center rounded border"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded border"
               style={{ borderColor: 'color-mix(in srgb, var(--c-amber) 40%, transparent)', background: 'color-mix(in srgb, var(--c-amber) 10%, transparent)' }}
             >
               <span className="font-mono text-base flicker" style={{ color: 'var(--c-amber)' }}>◈</span>
             </div>
-            <div>
-              <h1 className="font-[family-name:var(--font-display)] text-[16px] font-semibold leading-none tracking-wide" style={{ color: 'var(--c-text)' }}>
+            <div className="min-w-0">
+              <h1 className="truncate font-[family-name:var(--font-display)] text-[15px] font-semibold leading-none tracking-wide sm:text-[16px]" style={{ color: 'var(--c-text)' }}>
                 {t('dashboard.title')}
               </h1>
-              <p className="mt-1 font-mono text-[9px] tracking-[0.2em]" style={{ color: 'var(--c-text-faint)' }}>
+              <p className="mt-1 hidden font-mono text-[9px] tracking-[0.2em] sm:block" style={{ color: 'var(--c-text-faint)' }}>
                 {t('dashboard.subtitle')}
               </p>
             </div>
@@ -159,14 +159,22 @@ export function Dashboard() {
             </button>
             <button
               onClick={handleImportClick}
-              className="rounded border px-3 py-1.5 font-mono text-[10px] tracking-wider transition-colors"
+              className="hidden rounded border px-3 py-1.5 font-mono text-[10px] tracking-wider transition-colors touch-target-44 sm:flex sm:items-center sm:justify-center"
               style={{ borderColor: 'var(--c-line)', color: 'var(--c-text-dim)' }}
             >
               ↑ {t('dashboard.importWorkflow')}
             </button>
             <button
+              onClick={handleImportClick}
+              className="flex items-center justify-center rounded border px-2.5 py-1.5 font-mono text-[11px] transition-colors touch-target-44 sm:hidden"
+              style={{ borderColor: 'var(--c-line)', color: 'var(--c-text-dim)' }}
+              aria-label={t('dashboard.importWorkflow')}
+            >
+              ↑
+            </button>
+            <button
               onClick={handleNewProject}
-              className="rounded border px-3 py-1.5 font-mono text-[10px] font-semibold tracking-wider transition-colors"
+              className="flex items-center justify-center rounded border px-3 py-1.5 font-mono text-[10px] font-semibold tracking-wider transition-colors touch-target-44"
               style={{
                 borderColor: 'color-mix(in srgb, var(--c-amber) 50%, transparent)',
                 background: 'color-mix(in srgb, var(--c-amber) 12%, transparent)',
@@ -177,9 +185,10 @@ export function Dashboard() {
             </button>
             <button
               onClick={() => setSettingsOpen(true)}
-              className="rounded border px-2.5 py-1.5 font-mono text-[12px] transition-colors"
+              className="flex items-center justify-center rounded border px-2.5 py-1.5 font-mono text-[12px] transition-colors touch-target-44"
               style={{ borderColor: 'var(--c-line)', color: 'var(--c-text-dim)' }}
               title={t('dashboard.settings')}
+              aria-label={t('dashboard.settings')}
             >
               ⚙
             </button>
@@ -188,7 +197,7 @@ export function Dashboard() {
       </header>
 
       {/* 项目网格 */}
-      <main className="flex-1 overflow-y-auto p-5">
+      <main className="flex-1 overflow-y-auto p-4 sm:p-5">
         {isEmpty ? (
           // 空状态
           <div className="flex h-full min-h-[400px] flex-col items-center justify-center">
@@ -267,7 +276,7 @@ export function Dashboard() {
             <h2 className="mb-4 font-mono text-[10px] tracking-[0.2em]" style={{ color: 'var(--c-text-faint)' }}>
               {t('dashboard.recentProjects')}
             </h2>
-            <div className="flex flex-wrap gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {projects.map((p) => (
                 <ProjectCard key={p.id} project={p} onDeleted={refresh} />
               ))}
@@ -275,8 +284,8 @@ export function Dashboard() {
               {/* 新建卡片 */}
               <button
                 onClick={handleNewProject}
-                className="flex w-[260px] flex-col items-center justify-center gap-2 rounded-md border border-dashed py-8 transition-all hover:-translate-y-0.5"
-                style={{ borderColor: 'var(--c-line)', minHeight: '180px' }}
+                className="flex min-h-[180px] flex-col items-center justify-center gap-2 rounded-md border border-dashed py-8 transition-all hover:-translate-y-0.5"
+                style={{ borderColor: 'var(--c-line)' }}
               >
                 <span className="font-mono text-2xl" style={{ color: 'var(--c-text-faint)' }}>＋</span>
                 <span className="font-mono text-[10px] tracking-wider" style={{ color: 'var(--c-text-faint)' }}>

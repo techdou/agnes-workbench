@@ -34,28 +34,28 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4"
       style={{ background: 'rgba(10,14,20,0.75)', backdropFilter: 'blur(12px)' }}
       onClick={onClose}
     >
       <div
-        className="relative flex max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-lg border shadow-2xl"
+        className="relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border shadow-2xl sm:max-h-[80vh] sm:flex-row"
         style={{ borderColor: 'var(--c-line)', background: 'var(--c-ink)', animation: 'fade-up 0.2s ease-out' }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 左侧 tab 栏 */}
+        {/* tab 栏:桌面左侧纵向,移动端顶部横向滚动 */}
         <nav
-          className="flex w-40 shrink-0 flex-col border-r py-4"
+          className="flex shrink-0 gap-0 overflow-x-auto border-b py-2 scrollbar-hide sm:w-40 sm:flex-col sm:overflow-visible sm:border-b-0 sm:border-r sm:py-4"
           style={{ borderColor: 'var(--c-edge)', background: 'color-mix(in srgb, var(--c-void) 50%, transparent)' }}
         >
-          <h2 className="mb-4 px-4 font-[family-name:var(--font-display)] text-[14px] font-semibold" style={{ color: 'var(--c-text)' }}>
+          <h2 className="hidden shrink-0 px-4 pb-4 font-[family-name:var(--font-display)] text-[14px] font-semibold sm:block" style={{ color: 'var(--c-text)' }}>
             {t('settings.title')}
           </h2>
           {TABS.map((tb) => (
             <button
               key={tb.key}
               onClick={() => setTab(tb.key)}
-              className="flex items-center gap-2.5 border-l-2 px-4 py-2 text-left font-mono text-[11px] transition-colors"
+              className="flex shrink-0 items-center gap-2.5 border-b-2 px-4 py-2 text-left font-mono text-[11px] transition-colors sm:border-b-0 sm:border-l-2"
               style={{
                 borderColor: tab === tb.key ? 'var(--c-amber)' : 'transparent',
                 color: tab === tb.key ? 'var(--c-amber)' : 'var(--c-text-dim)',
@@ -63,13 +63,13 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               }}
             >
               <span className="w-4 text-center text-[12px]">{tb.icon}</span>
-              {t(tb.labelKey)}
+              <span className="whitespace-nowrap">{t(tb.labelKey)}</span>
             </button>
           ))}
         </nav>
 
         {/* 右侧内容 */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           {tab === 'api' && <ApiTab settings={settings} update={update} t={t} />}
           {tab === 'models' && <ModelsTab settings={settings} update={update} t={t} />}
           {tab === 'generation' && <GenTab settings={settings} update={update} t={t} />}
@@ -80,8 +80,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         {/* 关闭按钮 */}
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 rounded p-1 font-mono text-sm transition-colors hover:bg-white/5"
+          className="touch-target-44 absolute right-3 top-3 flex items-center justify-center rounded p-1 font-mono text-sm transition-colors hover:bg-white/5 sm:right-4 sm:top-4"
           style={{ color: 'var(--c-text-faint)' }}
+          aria-label={t('common.close')}
         >
           ✕
         </button>

@@ -1,10 +1,24 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Phosphor Studio — Agnes 创作工作台",
   description: "节点式 AI 创作 · Agnes 全模态引擎",
+};
+
+// 移动端 viewport:允许用户缩放(无障碍要求),不锁缩放
+// Next 16 把 viewport 从 metadata 拆出来独立导出,不能塞进 metadata
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  // 双主题对应主题色,iOS Safari 地址栏配色
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#0a0e14" },
+    { media: "(prefers-color-scheme: light)", color: "#f5f1e8" },
+  ],
 };
 
 // 字体本地化:next/font 在构建时下载并内联到 CSS,运行时不依赖 Google CDN

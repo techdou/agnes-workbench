@@ -78,7 +78,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-start justify-center pt-[15vh]"
+      className="fixed inset-0 z-[90] flex items-start justify-center p-3 pt-[10vh] sm:p-0 sm:pt-[15vh]"
       style={{ background: 'rgba(10,14,20,0.6)', backdropFilter: 'blur(8px)' }}
       onClick={onClose}
     >
@@ -133,7 +133,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
                         key={item.type}
                         onClick={() => add(item.type)}
                         onMouseEnter={() => setActiveIdx(idx)}
-                        className="flex w-full items-center gap-3 rounded px-2 py-2 text-left transition-colors"
+                        className="flex w-full items-center gap-3 rounded px-2 py-2.5 text-left transition-colors sm:py-2"
                         style={{
                           background: isActive ? 'color-mix(in srgb, var(--c-amber) 12%, transparent)' : 'transparent',
                           borderLeft: `2px solid ${isActive ? 'var(--c-amber)' : 'transparent'}`,

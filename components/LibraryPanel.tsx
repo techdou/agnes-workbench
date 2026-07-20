@@ -86,10 +86,16 @@ export function LibraryPanel() {
       </button>
 
       {open && (
-        <aside
-          className="fixed bottom-0 right-0 top-[84px] z-20 flex w-72 flex-col border-l backdrop-blur-md sm:w-80"
-          style={{ borderColor: 'var(--c-edge)', background: 'color-mix(in srgb, var(--c-void) 98%, transparent)' }}
-        >
+        <>
+          {/* 移动端遮罩:点击关闭 */}
+          <div
+            className="fixed inset-0 z-[19] bg-black/40 sm:hidden"
+            onClick={() => setOpen(false)}
+          />
+          <aside
+            className="fixed bottom-0 right-0 top-[84px] z-20 flex w-full flex-col border-l backdrop-blur-md sm:w-80"
+            style={{ borderColor: 'var(--c-edge)', background: 'color-mix(in srgb, var(--c-void) 98%, transparent)' }}
+          >
           <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'var(--c-edge)' }}>
             <div>
               <h2 className="font-[family-name:var(--font-display)] text-[14px] font-semibold" style={{ color: 'var(--c-text)' }}>
@@ -200,6 +206,7 @@ export function LibraryPanel() {
             )}
           </div>
         </aside>
+        </>
       )}
     </>
   );

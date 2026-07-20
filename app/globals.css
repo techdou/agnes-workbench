@@ -86,6 +86,13 @@ html, body {
   font-feature-settings: "ss01", "ss02";
   -webkit-font-smoothing: antialiased;
   transition: background-color 0.3s, color 0.3s;
+  /* 移动端:去掉 iOS 点击灰块 */
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  /* 防止画布缩放/平移时触发系统返回手势或橡皮筋 */
+  overscroll-behavior: none;
 }
 
 /* 全局背景辉光 */
@@ -239,4 +246,63 @@ body::before {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* ============================================================
+   移动端适配(<768px)
+   - 放大 xyFlow handle,提升触控热区
+   - 节点尺寸调整
+   - 禁用双击缩放干扰
+   ============================================================ */
+@media (max-width: 767px) {
+  /* handle 桌面是 10px,手机放大到 18px(半径 +4px,总热区 ~3x) */
+  .react-flow__handle {
+    width: 18px !important;
+    height: 18px !important;
+    border-width: 3px !important;
+  }
+  /* 节点 touch-action:单指拖动/双指缩放交给 xyFlow,但禁用浏览器双击缩放 */
+  .react-flow__pane {
+    touch-action: manipulation;
+  }
+  /* 节点本身允许 xyFlow 拖动,但禁用浏览器默认双击放大 */
+  .react-flow__node {
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  /* 长按触发的菜单不要被系统选择文字干扰 */
+  .react-flow__node:focus {
+    outline: none;
+  }
+  /* 画布控件按钮在手机上放大(右下角缩放/居中按钮热区) */
+  .react-flow__controls-button {
+    width: 36px !important;
+    height: 36px !important;
+  }
+  /* MiniMap 在手机上隐藏(屏幕太小看不清) */
+  .react-flow__minimap {
+    display: none !important;
+  }
+  /* 连线中点删除按钮放大 */
+  .react-flow__edge .foreignObject button {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 12px !important;
+  }
+}
+
+/* 工具类:确保触控目标 ≥44×44px(iOS HIG / Material 推荐) */
+.touch-target-44 {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* 横向滚动条隐藏(移动端 tab 栏等) */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

@@ -41,6 +41,11 @@ const en = {
   'toolbar.export': 'Export Workflow',
   'toolbar.archive': 'Gallery',
   'toolbar.archiveCount': 'items',
+  'toolbar.undo': 'Undo',
+  'toolbar.redo': 'Redo',
+  'toolbar.runSelected': 'Run',
+  'toolbar.multiSelect': 'Multi',
+  'toolbar.multiSelectExit': 'Exit Multi',
 
   // Node types
   'node.text': 'Text',
@@ -231,6 +236,21 @@ const en = {
   'error.previewNoImage': 'Preview node needs an upstream image',
   'error.videoPreviewNoInput': 'Video preview needs an upstream video node',
   'error.apiKeyMissing': 'AGNES_API_KEY not configured. Set it in Settings or check environment variables.',
+
+  // Mobile gestures (shown in ShortcutsModal on narrow screens)
+  'mobile.gestures.title': 'Touch Gestures',
+  'mobile.gesture.pan': 'Pan canvas',
+  'mobile.gesture.zoom': 'Zoom canvas',
+  'mobile.gesture.nodeMenu': 'Node menu',
+  'mobile.gesture.addNode': 'Add node',
+  'mobile.gesture.multiSelect': 'Multi-select',
+  'mobile.gesture.connect': 'Connect nodes',
+  'mobile.gesture.oneFingerDrag': 'One-finger drag',
+  'mobile.gesture.twoFingerPinch': 'Two-finger pinch',
+  'mobile.gesture.longPressNode': 'Long-press node',
+  'mobile.gesture.longPressPane': 'Long-press pane',
+  'mobile.gesture.tapMultiSelect': 'Tap ⊟ toggle',
+  'mobile.gesture.dragHandle': 'Drag ●●',
 };
 
 export default en;

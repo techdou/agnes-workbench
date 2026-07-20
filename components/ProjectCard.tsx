@@ -77,7 +77,7 @@ export function ProjectCard({ project, onDeleted }: ProjectCardProps) {
 
   return (
     <div
-      className="group relative w-[260px] shrink-0 overflow-hidden rounded-md border transition-all duration-200 hover:-translate-y-0.5"
+      className="group relative flex w-full flex-col overflow-hidden rounded-md border transition-all duration-200 hover:-translate-y-0.5"
       style={{ borderColor: 'var(--c-edge)', background: 'var(--c-ink)' }}
     >
       {/* 左侧色条 */}
@@ -156,8 +156,9 @@ export function ProjectCard({ project, onDeleted }: ProjectCardProps) {
           <div className="relative">
             <button
               onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
-              className="rounded p-1 font-mono text-xs opacity-0 transition-opacity hover:bg-white/5 group-hover:opacity-100"
+              className="touch-target-44 -mr-2 flex items-center justify-center rounded p-2 font-mono text-sm transition-opacity hover:bg-white/5 sm:opacity-0 sm:group-hover:opacity-100"
               style={{ color: 'var(--c-text-dim)' }}
+              aria-label="•••"
             >
               ⋮
             </button>

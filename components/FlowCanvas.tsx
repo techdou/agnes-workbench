@@ -119,6 +119,8 @@ function FlowCanvasInner() {
   const deleteNodes = useFlowStore((s) => s.deleteNodes);
   const duplicateNodes = useFlowStore((s) => s.duplicateNodes);
   const runNode = useFlowStore((s) => s.runNode);
+  const undo = useFlowStore((s) => s.undo);
+  const redo = useFlowStore((s) => s.redo);
   const loadSettings = useSettings((s) => s.load);
   const pushToast = useToast((s) => s.push);
 
@@ -126,6 +128,19 @@ function FlowCanvasInner() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  // 移动端多选模式:开启后点击节点 toggle 选中(替代桌面 Shift+Click)
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+
+  // 触屏设备检测:仅在客户端渲染后判断一次(SSR 时为 false)
+  // 同时支持 hover + 精确指针的设备视为桌面(不显示移动专属 UI)
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const finePointer = window.matchMedia('(pointer: fine)').matches;
+    const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsTouchDevice(coarsePointer && !finePointer);
+  }, []);
 
   // NodeCreator 状态:拖连线到空白处松开时弹出
   const [creator, setCreator] = useState<{
@@ -257,14 +272,81 @@ function FlowCanvasInner() {
     [screenToFlowPosition]
   );
 
+  // ---------- 移动端长按交互 ----------
+  // 长按节点 350ms = 右键菜单(运行/复制/断开/删除)
+  // 长按空白 400ms = 空白右键菜单(添加节点)
+  // 手指移动超过 10px 视为拖拽/平移,取消长按
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressStart = useRef<{ x: number; y: number } | null>(null);
+
+  const clearLongPress = useCallback(() => {
+    if (longPressTimer.current !== null) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    longPressStart.current = null;
+  }, []);
+
+  // 统一在画布外层 div 上监听 touch,通过 target 判断点的是节点还是空白
+  const onCanvasTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isTouchDevice || e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    // 判断是否点在节点上(xyFlow 节点根元素带 .react-flow__node,属性 data-id 是节点 id)
+    const nodeEl = (e.target as HTMLElement).closest('.react-flow__node') as HTMLElement | null;
+    const nodeId = nodeEl?.getAttribute('data-id') || null;
+    longPressStart.current = { x: touch.clientX, y: touch.clientY };
+    // 节点长按 350ms,空白长按 400ms(略长,避免误触)
+    const delay = nodeId ? 350 : 400;
+    longPressTimer.current = setTimeout(() => {
+      if (nodeId) {
+        setContextMenu({ x: touch.clientX, y: touch.clientY, nodeId });
+      } else {
+        const flowPos = screenToFlowPosition({ x: touch.clientX, y: touch.clientY });
+        setContextMenu({ x: touch.clientX, y: touch.clientY, panePos: flowPos });
+      }
+      clearLongPress();
+    }, delay);
+  }, [isTouchDevice, screenToFlowPosition, clearLongPress]);
+
+  const onCanvasTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (longPressStart.current && e.touches.length === 1) {
+      const dx = e.touches[0].clientX - longPressStart.current.x;
+      const dy = e.touches[0].clientY - longPressStart.current.y;
+      if (Math.hypot(dx, dy) > 10) clearLongPress();
+    } else if (e.touches.length > 1) {
+      // 双指操作 = 缩放,取消长按
+      clearLongPress();
+    }
+  }, [clearLongPress]);
+
+  // 多选模式下点击节点 toggle 选中(替代桌面 Shift+Click)
+  const onNodeClick = useCallback((_: React.MouseEvent, node: { id: string; selected?: boolean }) => {
+    if (!multiSelectMode) return;
+    // 手动 toggle selected,xyFlow 会同步触发 change
+    onNodesChange([{
+      type: 'select',
+      id: node.id,
+      selected: !node.selected,
+    }]);
+  }, [multiSelectMode, onNodesChange]);
+
   return (
     <div className="relative flex h-[100dvh] w-screen flex-col overflow-hidden">
       <Toolbar
         onOpenPalette={() => setPaletteOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
+        isTouchDevice={isTouchDevice}
+        multiSelectMode={multiSelectMode}
+        onToggleMultiSelect={() => setMultiSelectMode((v) => !v)}
       />
 
-      <div className="relative flex-1">
+      <div
+        className="relative flex-1"
+        onTouchStart={onCanvasTouchStart}
+        onTouchMove={onCanvasTouchMove}
+        onTouchEnd={clearLongPress}
+        onTouchCancel={clearLongPress}
+      >
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -275,6 +357,7 @@ function FlowCanvasInner() {
           onConnect={onConnect}
           onConnectStart={onConnectStart}
           onConnectEnd={onConnectEnd}
+          onNodeClick={onNodeClick}
           onNodeContextMenu={(e, node) => {
             e.preventDefault();
             setContextMenu({ x: e.clientX, y: e.clientY, nodeId: node.id });
@@ -292,8 +375,13 @@ function FlowCanvasInner() {
           }}
           proOptions={{ hideAttribution: true }}
           deleteKeyCode={null}
-          multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
-          selectionOnDrag
+          multiSelectionKeyCode={isTouchDevice ? null : ['Meta', 'Control', 'Shift']}
+          selectionOnDrag={!isTouchDevice && !multiSelectMode}
+          // 移动端触屏:单指拖动 = 平移,双指捏合 = 缩放
+          panOnDrag
+          zoomOnPinch
+          // 关闭双击缩放(手机上容易误触)
+          zoomOnDoubleClick={!isTouchDevice}
           onNodeDragStop={(e, node) => {
             // Alt+拖拽 = 复制节点到新位置(原节点留在原地)
             if (e.altKey) {
@@ -320,20 +408,38 @@ function FlowCanvasInner() {
         <LibraryPanel />
         <ToastContainer />
 
+        {/* 移动端底部工具条:撤销/重做(替代 Ctrl+Z/Ctrl+Shift+Z) */}
+        {isTouchDevice && (
+          <div
+            className="fixed bottom-6 left-6 z-30 flex flex-col gap-1.5 rounded-full border p-1 shadow-xl backdrop-blur-md"
+            style={{
+              borderColor: 'var(--c-line)',
+              background: 'color-mix(in srgb, var(--c-ink) 95%, transparent)',
+            }}
+          >
+            <RoundButton onClick={undo} icon="↶" label={t('toolbar.undo')} />
+            <RoundButton onClick={redo} icon="↷" label={t('toolbar.redo')} />
+          </div>
+        )}
+
         {/* 批量操作浮动条:选中 >=1 节点时显示 */}
         {selectedCount > 0 && (
           <div
-            className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border px-4 py-2 shadow-xl backdrop-blur-md"
+            className="fixed bottom-6 left-1/2 z-40 flex max-w-[92vw] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border px-3 py-2 shadow-xl backdrop-blur-md scrollbar-hide sm:gap-2 sm:px-4"
             style={{
               borderColor: 'var(--c-line)',
               background: 'color-mix(in srgb, var(--c-ink) 95%, transparent)',
               animation: 'fade-up 0.2s ease-out',
             }}
           >
-            <span className="font-mono text-[10px] tracking-wider" style={{ color: 'var(--c-phosphor)' }}>
-              {selectedCount} <span style={{ color: 'var(--c-text-faint)' }}>SELECTED</span>
+            <span className="shrink-0 font-mono text-[10px] tracking-wider" style={{ color: 'var(--c-phosphor)' }}>
+              {selectedCount} <span style={{ color: 'var(--c-text-faint)' }}>SEL</span>
             </span>
-            <div className="mx-1 h-4 w-px" style={{ background: 'var(--c-line)' }} />
+            <div className="mx-0.5 h-4 w-px shrink-0 sm:mx-1" style={{ background: 'var(--c-line)' }} />
+            <BatchButton onClick={() => {
+              selectedIds.forEach((id) => runNode(id));
+              pushToast(t('toast.runningAll', { count: selectedIds.length }), 'info');
+            }} icon="▶" label={t('toolbar.runSelected')} />
             <BatchButton onClick={() => duplicateNodes(selectedIds)} icon="⧉" label={t('batch.duplicate')} />
             <BatchButton
               onClick={() => {
@@ -411,11 +517,26 @@ function BatchButton({ onClick, icon, label, danger }: { onClick: () => void; ic
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[10px] tracking-wider transition-colors hover:bg-white/5"
+      className="touch-target-44 flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[10px] tracking-wider transition-colors hover:bg-white/5 sm:px-3"
       style={{ color: danger ? 'var(--c-rust)' : 'var(--c-text-dim)' }}
     >
       <span>{icon}</span>
-      {label}
+      <span className="hidden sm:inline">{label}</span>
+    </button>
+  );
+}
+
+// 移动端专用:圆形按钮(撤销/重做)
+function RoundButton({ onClick, icon, label }: { onClick: () => void; icon: string; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className="touch-target-44 flex h-9 w-9 items-center justify-center rounded-full font-mono text-sm transition-colors hover:bg-white/5"
+      style={{ color: 'var(--c-text-dim)' }}
+      aria-label={label}
+      title={label}
+    >
+      {icon}
     </button>
   );
 }
