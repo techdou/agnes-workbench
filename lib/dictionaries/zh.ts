@@ -162,6 +162,19 @@ const zh = {
   'archive.loadFailed': '加载失败',
   'archive.retry': '重试',
   'archive.noPrompt': '(无提示词)',
+  'archive.favorite': '收藏',
+  'archive.unfavorite': '取消收藏',
+  'archive.favoritedOnly': '只看收藏',
+
+  // 全局画廊(/gallery)
+  'gallery.title': '画廊',
+  'gallery.subtitle': '所有项目中收藏的作品',
+  'gallery.empty': '画廊为空',
+  'gallery.emptyDesc': '在任意项目的归档里点 ★ 收藏,作品会出现在这里',
+  'gallery.howTo': '在项目归档里点 ☆ 收藏 → 作品会自动出现在这里',
+  'gallery.imgCount': '图片',
+  'gallery.vidCount': '视频',
+  'gallery.openProject': '打开原项目',
 
   // 设置
   'settings.title': '设置',

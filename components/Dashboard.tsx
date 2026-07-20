@@ -139,6 +139,17 @@ export function Dashboard() {
           <div className="flex items-center gap-2">
             <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleFileChange} />
             <button
+              onClick={() => router.push('/gallery')}
+              className="rounded border px-3 py-1.5 font-mono text-[10px] tracking-wider transition-colors"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--c-amber) 40%, transparent)',
+                color: 'var(--c-amber)',
+              }}
+              title={t('gallery.title')}
+            >
+              ★ {t('gallery.title')}
+            </button>
+            <button
               onClick={handleImportClick}
               className="rounded border px-3 py-1.5 font-mono text-[10px] tracking-wider transition-colors"
               style={{ borderColor: 'var(--c-line)', color: 'var(--c-text-dim)' }}

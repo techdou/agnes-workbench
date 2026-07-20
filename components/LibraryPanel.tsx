@@ -10,6 +10,7 @@ interface Entry {
   type: 'image' | 'video';
   prompt?: string;
   createdAt: string;
+  favorited?: boolean;
 }
 
 export function LibraryPanel() {
@@ -34,6 +35,23 @@ export function LibraryPanel() {
       setError(e instanceof Error ? e.message : t('archive.loadFailed'));
     } finally {
       setLoading(false);
+    }
+  }
+
+  // 切换收藏:乐观更新,失败回滚
+  async function toggleFavorite(hash: string, current: boolean) {
+    const prev = entries;
+    const next = current ? false : true;
+    setEntries(entries.map((e) => (e.hash === hash ? { ...e, favorited: next } : e)));
+    try {
+      const resp = await fetch(`/api/cache/${hash}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ favorited: next }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    } catch {
+      setEntries(prev); // 失败回滚
     }
   }
 
@@ -150,6 +168,23 @@ export function LibraryPanel() {
                       >
                         {e.type === 'image' ? 'IMG' : 'VID'}
                       </span>
+                      {/* ★ 收藏按钮:绝对定位右上角,阻止冒泡防止触发 <a> 下载 */}
+                      <button
+                        onClick={(ev) => {
+                          ev.preventDefault();
+                          ev.stopPropagation();
+                          toggleFavorite(e.hash, !!e.favorited);
+                        }}
+                        className="absolute right-1 top-1 rounded px-1.5 py-0.5 font-mono text-[12px] leading-none backdrop-blur-sm transition-transform hover:scale-125"
+                        style={{
+                          background: 'color-mix(in srgb, var(--c-void) 85%, transparent)',
+                          color: e.favorited ? 'var(--c-amber)' : 'var(--c-text-faint)',
+                          textShadow: e.favorited ? '0 0 8px var(--c-bg-glow-1)' : 'none',
+                        }}
+                        title={e.favorited ? t('archive.unfavorite') : t('archive.favorite')}
+                      >
+                        {e.favorited ? '★' : '☆'}
+                      </button>
                     </div>
                     <div className="px-1.5 py-1.5">
                       <p className="line-clamp-2 font-[family-name:var(--font-display)] text-[10px] leading-tight" style={{ color: 'var(--c-text-dim)' }}>

@@ -143,6 +143,8 @@ export interface ManifestEntry {
   createdAt: string;
   projectId?: string;
   userId?: string;
+  favorited?: boolean; // ★ 是否收藏(全局画廊用)
+  favoritedAt?: string; // 收藏时间(用于跨项目排序)
 }
 
 async function ensureDirs() {
@@ -305,31 +307,62 @@ export async function getEntryByUserHash(
     where: { userId_hash: { userId, hash } },
   });
   if (!asset) return undefined;
-  return {
-    hash: asset.hash,
-    originalUrl: asset.originalUrl,
-    localPath: asset.localPath,
-    type: asset.type as 'image' | 'video',
-    prompt: asset.prompt || undefined,
-    createdAt: asset.createdAt.toISOString(),
-    projectId: asset.projectId || undefined,
-    userId: asset.userId,
-  };
+  return assetToEntry(asset);
 }
 
-// 列出条目(按时间倒序,按 userId + projectId 过滤)
+// 列出条目(按时间倒序)
+// - projectId 过滤本项目归档
+// - onlyFavorited 只看收藏(跨项目,用于 /gallery)
+// 注:多用户场景下 userId 必填,画廊是"某用户的全局收藏",不是跨用户
 export async function listEntries(
   userId: string,
-  projectId?: string
+  projectId?: string,
+  onlyFavorited?: boolean
 ): Promise<ManifestEntry[]> {
   const assets = await prisma.mediaAsset.findMany({
     where: {
       userId,
       ...(projectId ? { projectId } : {}),
+      ...(onlyFavorited ? { favorited: true } : {}),
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: onlyFavorited ? { favoritedAt: 'desc' } : { createdAt: 'desc' },
   });
-  return assets.map((a) => ({
+  return assets.map(assetToEntry);
+}
+
+/**
+ * 切换某条目的收藏状态(给 PATCH /api/cache/[hash] 用)
+ * 严格按 (userId, hash) 所有权校验:用户只能改自己名下的
+ */
+export async function setFavorited(
+  userId: string,
+  hash: string,
+  favorited: boolean
+): Promise<ManifestEntry> {
+  const asset = await prisma.mediaAsset.update({
+    where: { userId_hash: { userId, hash } },
+    data: {
+      favorited,
+      favoritedAt: favorited ? new Date() : null,
+    },
+  });
+  return assetToEntry(asset);
+}
+
+// Prisma row → ManifestEntry DTO(统一映射,避免字段名/类型差异散落)
+function assetToEntry(a: {
+  hash: string;
+  originalUrl: string;
+  localPath: string;
+  type: string;
+  prompt: string | null;
+  createdAt: Date;
+  projectId: string | null;
+  userId: string;
+  favorited: boolean;
+  favoritedAt: Date | null;
+}): ManifestEntry {
+  return {
     hash: a.hash,
     originalUrl: a.originalUrl,
     localPath: a.localPath,
@@ -338,7 +371,9 @@ export async function listEntries(
     createdAt: a.createdAt.toISOString(),
     projectId: a.projectId || undefined,
     userId: a.userId,
-  }));
+    favorited: a.favorited,
+    favoritedAt: a.favoritedAt ? a.favoritedAt.toISOString() : undefined,
+  };
 }
 
 /**
