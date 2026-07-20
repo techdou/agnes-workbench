@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
+    "postinstall": "node -e \"require('fs').rmSync('.next/types',{recursive:true,force:true})\""
   },
   "dependencies": {
     "@xyflow/react": "^12.11.2",

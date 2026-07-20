@@ -150,6 +150,9 @@ const zh = {
   'toast.connectionRejected': '该类型的节点不能连接(类型不匹配)',
   'toast.runCancelled': '运行已取消',
   'toast.videoTimeout': '视频生成超时',
+  'toast.undoBlockedWhileRunning': '节点运行中,暂不可撤销(等运行结束)',
+  'toast.redoBlockedWhileRunning': '节点运行中,暂不可重做(等运行结束)',
+  'toast.videoRateLimit': '视频节点限流:已自动间隔至 {interval}s/个,避免触发 RPM 限制',
 
   // 归档面板
   'archive.title': '画廊',
@@ -184,6 +187,8 @@ const zh = {
   'settings.api.test': '测试连接',
   'settings.api.testing': '测试中…',
   'settings.api.testOk': '连接成功',
+  'settings.api.testOkNoKey': '地址可连通,但 API Key 无效',
+  'settings.api.testOkRateLimited': '地址可连通,但服务繁忙/限流',
   'settings.api.testFail': '连接失败',
   'settings.gen.defaultSize': '默认图片尺寸',
   'settings.gen.defaultFrames': '默认视频帧数',

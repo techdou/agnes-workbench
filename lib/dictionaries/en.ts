@@ -150,6 +150,9 @@ const en = {
   'toast.connectionRejected': 'Cannot connect: type mismatch',
   'toast.runCancelled': 'Run cancelled',
   'toast.videoTimeout': 'Video generation timed out',
+  'toast.undoBlockedWhileRunning': 'Cannot undo while nodes are running (wait for completion)',
+  'toast.redoBlockedWhileRunning': 'Cannot redo while nodes are running (wait for completion)',
+  'toast.videoRateLimit': 'Video rate-limited: auto-spacing to {interval}s/node to avoid RPM limits',
 
   // Archive panel
   'archive.title': 'Gallery',
@@ -184,6 +187,8 @@ const en = {
   'settings.api.test': 'Test Connection',
   'settings.api.testing': 'Testing…',
   'settings.api.testOk': 'Connection OK',
+  'settings.api.testOkNoKey': 'Reachable, but API Key invalid',
+  'settings.api.testOkRateLimited': 'Reachable, but rate-limited / busy',
   'settings.api.testFail': 'Connection failed',
   'settings.gen.defaultSize': 'Default image size',
   'settings.gen.defaultFrames': 'Default video frames',

@@ -39,7 +39,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       onClick={onClose}
     >
       <div
-        className="flex max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-lg border shadow-2xl"
+        className="relative flex max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-lg border shadow-2xl"
         style={{ borderColor: 'var(--c-line)', background: 'var(--c-ink)', animation: 'fade-up 0.2s ease-out' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -116,12 +116,15 @@ type TabProps = {
 };
 
 function ApiTab({ settings, update, t }: TabProps) {
-  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle');
+  // [M3] 测试结果分四档:ok(200)/ partial(401|403|429|503,地址通但 key/限流问题)/ fail(其他)/ testing
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'partial' | 'fail'>('idle');
   const [testError, setTestError] = useState<string | null>(null);
+  const [partialMsg, setPartialMsg] = useState<string>('');
 
   async function testConnection() {
     setTestStatus('testing');
     setTestError(null);
+    setPartialMsg('');
     try {
       // 和生图用完全一样的参数构造方式(authHeaders + modelParams)
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -135,12 +138,17 @@ function ApiTab({ settings, update, t }: TabProps) {
         headers,
         body: JSON.stringify(body),
       });
-      // 200 = 完全正常
-      // 401 = key 无效但地址通了(能收到 Agnes 的鉴权响应)
-      // 429 = 限流(RPM 超限),但说明地址+key 能连通
-      // 503 = 服务端队列满/过载,但说明地址+key 能连通(只是暂时忙)
-      if (resp.ok || resp.status === 401 || resp.status === 429 || resp.status === 503) {
+      if (resp.ok) {
+        // 200 = 完全正常
         setTestStatus('ok');
+      } else if (resp.status === 401 || resp.status === 403) {
+        // 鉴权失败:地址能连通,但 key 错/无权限
+        setTestStatus('partial');
+        setPartialMsg(t('settings.api.testOkNoKey'));
+      } else if (resp.status === 429 || resp.status === 503) {
+        // 限流/过载:地址+key 都能连通,只是暂时忙
+        setTestStatus('partial');
+        setPartialMsg(t('settings.api.testOkRateLimited'));
       } else {
         const err = await resp.json().catch(() => ({}));
         setTestStatus('fail');
@@ -186,6 +194,9 @@ function ApiTab({ settings, update, t }: TabProps) {
       </button>
       {testStatus === 'ok' && (
         <span className="ml-3 font-mono text-[11px]" style={{ color: 'var(--c-phosphor)' }}>✓ {t('settings.api.testOk')}</span>
+      )}
+      {testStatus === 'partial' && (
+        <span className="ml-3 font-mono text-[11px]" style={{ color: 'var(--c-amber)' }}>◐ {partialMsg}</span>
       )}
       {testStatus === 'fail' && (
         <div className="ml-3">
