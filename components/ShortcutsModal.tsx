@@ -1,14 +1,17 @@
 'use client';
 
 // 快捷键速查表 —— 按 ? 唤起
+// [M5] 触屏判断跟 FlowCanvas 统一用 isTouchDevice prop,不再依赖 CSS 媒体查询,
+// 这样触屏笔记本(Surface 等)的行为跟其他触屏设备一致
 import { useEffect } from 'react';
 import { useTranslation } from '@/lib/i18n';
 
 interface ShortcutsModalProps {
   onClose: () => void;
+  isTouchDevice?: boolean;
 }
 
-export function ShortcutsModal({ onClose }: ShortcutsModalProps) {
+export function ShortcutsModal({ onClose, isTouchDevice }: ShortcutsModalProps) {
   const t = useTranslation();
 
   useEffect(() => {
@@ -65,44 +68,48 @@ export function ShortcutsModal({ onClose }: ShortcutsModalProps) {
           </button>
         </div>
 
-        {/* 列表:桌面端键盘快捷键 / 移动端手势说明 */}
+        {/* 列表:触屏显示手势,否则显示键盘快捷键 */}
         <div className="p-4 sm:p-5">
-          {/* 移动端手势说明 */}
-          <div className="mb-4 sm:hidden">
-            <p className="mb-2 font-mono text-[9px] tracking-[0.2em]" style={{ color: 'var(--c-text-faint)' }}>
-              {t('mobile.gestures.title')}
-            </p>
-            {gestures.map((g) => (
-              <div key={g.labelKey} className="flex items-center justify-between gap-3 py-2">
-                <span className="text-[12px]" style={{ color: 'var(--c-text-dim)' }}>
-                  {t(g.labelKey)}
-                </span>
-                <span
-                  className="shrink-0 rounded border px-2 py-1 font-mono text-[10px]"
-                  style={{ borderColor: 'var(--c-line)', background: 'var(--c-void)', color: 'var(--c-text)' }}
-                >
-                  {g.keys}
-                </span>
-              </div>
-            ))}
-          </div>
+          {/* 触屏设备:手势说明 */}
+          {isTouchDevice && (
+            <div className="mb-4">
+              <p className="mb-2 font-mono text-[9px] tracking-[0.2em]" style={{ color: 'var(--c-text-faint)' }}>
+                {t('mobile.gestures.title')}
+              </p>
+              {gestures.map((g) => (
+                <div key={g.labelKey} className="flex items-center justify-between gap-3 py-2">
+                  <span className="text-[12px]" style={{ color: 'var(--c-text-dim)' }}>
+                    {t(g.labelKey)}
+                  </span>
+                  <span
+                    className="shrink-0 rounded border px-2 py-1 font-mono text-[10px]"
+                    style={{ borderColor: 'var(--c-line)', background: 'var(--c-void)', color: 'var(--c-text)' }}
+                  >
+                    {g.keys}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
 
-          {/* 桌面端键盘快捷键 */}
-          <div className="hidden sm:block">
-            {shortcuts.map((s) => (
-              <div key={s.labelKey} className="flex items-center justify-between py-2">
-                <span className="text-[13px]" style={{ color: 'var(--c-text-dim)' }}>
-                  {t(s.labelKey)}
-                </span>
-                <kbd
-                  className="rounded border px-2 py-1 font-mono text-[11px]"
-                  style={{ borderColor: 'var(--c-line)', background: 'var(--c-void)', color: 'var(--c-text)' }}
-                >
-                  {s.keys}
-                </kbd>
-              </div>
-            ))}
-          </div>
+          {/* 非触屏:键盘快捷键 */}
+          {!isTouchDevice && (
+            <div>
+              {shortcuts.map((s) => (
+                <div key={s.labelKey} className="flex items-center justify-between py-2">
+                  <span className="text-[13px]" style={{ color: 'var(--c-text-dim)' }}>
+                    {t(s.labelKey)}
+                  </span>
+                  <kbd
+                    className="rounded border px-2 py-1 font-mono text-[11px]"
+                    style={{ borderColor: 'var(--c-line)', background: 'var(--c-void)', color: 'var(--c-text)' }}
+                  >
+                    {s.keys}
+                  </kbd>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

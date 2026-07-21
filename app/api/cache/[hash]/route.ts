@@ -70,11 +70,27 @@ export async function GET(
 // PATCH /api/cache/[hash] —— 切换收藏状态
 // body: { favorited: boolean }
 // 严格按 (userId, hash) 所有权校验:用户只能改自己名下的
+// [H3] 同源校验:多重防护(session 已挡未登录,同源再挡 CSRF)
+function isSameOrigin(req: NextRequest): boolean {
+  const origin = req.headers.get('origin');
+  const host = req.headers.get('host');
+  if (!origin || !host) return false;
+  try {
+    const u = new URL(origin);
+    return u.host === host;
+  } catch {
+    return false;
+  }
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ hash: string }> }
 ) {
   try {
+    if (!isSameOrigin(req)) {
+      return NextResponse.json({ error: '跨站请求被拒绝' }, { status: 403 });
+    }
     const session = await getSession();
     if (!session?.user) {
       return NextResponse.json({ error: '未登录' }, { status: 401 });

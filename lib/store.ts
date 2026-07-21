@@ -682,14 +682,14 @@ async function executeNode(id: string, opts?: { silent?: boolean }): Promise<voi
         const targetType = resolveTargetType(d.targetType || 'auto', nodes, edges, id);
         const systemPrompt = buildEnhanceSystemPrompt(targetType);
 
-        // [中文摘要] 并行:扩写 + 翻译(把扩写结果翻成中文摘要)
-        // 用 Promise 包装让两者同时跑,翻译失败不阻断扩写
+        // [中文摘要] 串行执行:扩写完再翻译扩写结果
+        // 必须串行不能并行——翻译依赖扩写结果。如果并行翻原文,
+        // 扩写加的结构化词(bokeh/cinematic/rule of thirds)会丢,
+        // 摘要失去"让用户看懂最终 prompt 说了啥"的意义。
+        // 翻译失败不阻断扩写:catch 里 summary=undefined,扩写结果照常保存。
         let expanded: string;
         let summary: string | undefined;
         if (d.withSummary) {
-          // 先扩写,拿到英文再翻成中文(翻译依赖扩写结果,所以是串行)
-          // 注:试过并行(扩写 + 原文翻译),但原文翻译会丢掉扩写加的结构化词,
-          // 摘要意义是"让用户看懂最终 prompt 说了啥",所以必须翻扩写后的
           expanded = await callText(text, systemPrompt);
           if (cancelled) return;
           try {

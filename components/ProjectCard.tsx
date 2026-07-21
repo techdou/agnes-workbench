@@ -165,7 +165,7 @@ export function ProjectCard({ project, onDeleted }: ProjectCardProps) {
               onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
               className="touch-target-44 -mr-2 flex items-center justify-center rounded p-2 font-mono text-sm transition-opacity hover:bg-white/5 sm:opacity-0 sm:group-hover:opacity-100"
               style={{ color: 'var(--c-text-dim)' }}
-              aria-label="•••"
+              aria-label={t('common.moreActions')}
             >
               ⋮
             </button>

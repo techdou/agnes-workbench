@@ -7,6 +7,7 @@ const en = {
   'common.rename': 'Rename',
   'common.confirm': 'Confirm',
   'common.close': 'Close',
+  'common.moreActions': 'More actions',
   'common.search': 'Search',
   'common.loading': 'Loading…',
   'common.empty': 'Empty',
@@ -173,6 +174,7 @@ const en = {
   'archive.favorite': 'Favorite',
   'archive.unfavorite': 'Unfavorite',
   'archive.favoritedOnly': 'Favorites only',
+  'archive.unfavoriteFailed': 'Failed to unfavorite, please retry',
 
   // Global gallery (/gallery)
   'gallery.title': 'Gallery',

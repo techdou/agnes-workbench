@@ -133,19 +133,10 @@ function assertSafeLocalPath(localPath: string): void {
 const inFlight = new Map<string, Promise<CacheResult>>();
 
 // ---------- 类型 ----------
-
-export interface ManifestEntry {
-  hash: string;
-  originalUrl: string;
-  localPath: string;
-  type: 'image' | 'video';
-  prompt?: string;
-  createdAt: string;
-  projectId?: string;
-  userId?: string;
-  favorited?: boolean; // ★ 是否收藏(全局画廊用)
-  favoritedAt?: string; // 收藏时间(用于跨项目排序)
-}
+// ManifestEntry + filterAndSortEntries 抽到 cache-logic.ts(无 IO 依赖,便于单测)
+export type { ManifestEntry } from './cache-logic';
+export { filterAndSortEntries } from './cache-logic';
+import type { ManifestEntry } from './cache-logic';
 
 async function ensureDirs() {
   await fs.mkdir(IMAGES_DIR, { recursive: true });
@@ -282,7 +273,8 @@ async function doCache(
 
 // 根据 hash 取条目(用于 /api/cache/[hash] 路由)
 // 多用户场景下:同一个 hash 可能属于多个用户,这里返回任意一条用于读文件
-// 所有权校验由路由层基于 userId 做
+// [H4] 警告:此函数无所有权校验。所有权校验由路由层基于 userId 做
+// (普通用户走 getEntryByUserHash;admin 路径用这个)
 export async function getEntryByHash(hash: string): Promise<ManifestEntry | undefined> {
   const asset = await prisma.mediaAsset.findFirst({ where: { hash } });
   if (!asset) return undefined;
@@ -310,6 +302,39 @@ export async function getEntryByUserHash(
   return assetToEntry(asset);
 }
 
+/**
+ * [M1] 迁移辅助:给所有 favorited=true 但没有 favoritedAt 的老条目回填时间
+ * 避免 listEntries 排序时新老混排无意义。
+ * 用 createdAt 作为 fallback(无法精确知道实际收藏时刻,但比无值好)
+ */
+export async function backfillFavoritedAt(): Promise<number> {
+  // multi-user 版:Prisma 批量更新 favorited=true AND favoritedAt IS NULL
+  // 把 createdAt 回填到 favoritedAt(不精确知道收藏时刻,但比 null 好)
+  const result = await prisma.mediaAsset.updateMany({
+    where: {
+      favorited: true,
+      favoritedAt: null,
+    },
+    data: {
+      // Prisma 不支持直接用另一列的值更新,只能先查再循环更新
+      // 单进程惰性触发,数量有限,可接受
+    },
+  });
+  // updateMany 不能跨列赋值,改成查 + 逐条更新
+  if (result.count === 0) return 0;
+  const needFix = await prisma.mediaAsset.findMany({
+    where: { favorited: true, favoritedAt: null },
+    select: { id: true, createdAt: true },
+  });
+  for (const row of needFix) {
+    await prisma.mediaAsset.update({
+      where: { id: row.id },
+      data: { favoritedAt: row.createdAt },
+    });
+  }
+  return needFix.length;
+}
+
 // 列出条目(按时间倒序)
 // - projectId 过滤本项目归档
 // - onlyFavorited 只看收藏(跨项目,用于 /gallery)
@@ -319,6 +344,8 @@ export async function listEntries(
   projectId?: string,
   onlyFavorited?: boolean
 ): Promise<ManifestEntry[]> {
+  // multi-user 版:DB 直接做过滤 + 排序,不走 filterAndSortEntries(那是 main 的 JSON 版)
+  // 排序 DB 直接 orderBy,但老数据 favoritedAt 可能为 null → 用 backfillFavoritedAt 保证有值
   const assets = await prisma.mediaAsset.findMany({
     where: {
       userId,
