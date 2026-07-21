@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useSettings } from '@/lib/settings';
 import { useTranslation } from '@/lib/i18n';
 import { useToast } from '@/lib/useToast';
+import { GalleryVideo } from './MediaCard';
 
 interface GalleryEntry {
   hash: string;
@@ -63,7 +64,8 @@ export function GalleryPage() {
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     } catch {
       setEntries(prev);
-      pushToast(t('archive.loadFailed'), 'error');
+      // [M3] 用专门的 unfavoriteFailed 文案,不再复用"加载失败"
+      pushToast(t('archive.unfavoriteFailed'), 'error');
     }
   }
 
@@ -185,12 +187,13 @@ export function GalleryPage() {
                 {/* 左色条(收藏标记) */}
                 <span
                   className="pointer-events-none absolute left-0 top-0 z-10 h-full w-[3px]"
-                  style={{ background: 'var(--c-amber)', boxShadow: '0 0 8px var(--c-bg-glow-1)' }}
+                  style={{ background: 'var(--c-amber)', boxShadow: '0 0 8px color-mix(in srgb, var(--c-amber) 40%, transparent)' }}
                 />
                 {/* 媒体 */}
                 <a
                   href={`/api/cache/${e.hash}`}
-                  download
+                  // [M4] 下载文件名规范化:agnes-image-a3f2c1d9.<ext>
+                  download={`agnes-${e.type}-${e.hash.slice(0, 8)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="relative block overflow-hidden"
@@ -204,17 +207,7 @@ export function GalleryPage() {
                       loading="lazy"
                     />
                   ) : (
-                    <>
-                      <video
-                        src={`/api/cache/${e.hash}`}
-                        className="w-full object-cover"
-                        muted
-                        preload="none"
-                      />
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                        <span className="font-mono text-2xl text-white opacity-80">▶</span>
-                      </div>
-                    </>
+                    <GalleryVideo hash={e.hash} className="w-full object-cover" />
                   )}
                   <span
                     className="absolute left-2 top-2 rounded px-1.5 py-0.5 font-mono text-[8px] tracking-wider backdrop-blur-sm"
@@ -226,6 +219,20 @@ export function GalleryPage() {
                     {e.type === 'image' ? 'IMG' : 'VID'}
                   </span>
                 </a>
+                {/* ★ 取消收藏按钮:DOM 跟 <a> 平级,避免事件竞争 */}
+                <button
+                  onClick={() => unfavorite(e)}
+                  className="absolute right-2 top-2 z-10 rounded px-1.5 py-0.5 font-mono text-[12px] leading-none backdrop-blur-sm transition-transform hover:scale-125"
+                  style={{
+                    background: 'color-mix(in srgb, var(--c-void) 85%, transparent)',
+                    color: 'var(--c-amber)',
+                    textShadow: '0 0 8px color-mix(in srgb, var(--c-amber) 40%, transparent)',
+                  }}
+                  title={t('archive.unfavorite')}
+                  aria-label={t('archive.unfavorite')}
+                >
+                  ★
+                </button>
                 {/* 底部信息 + 操作 */}
                 <div className="px-3 py-2.5 pl-4">
                   {e.prompt && (
@@ -244,18 +251,11 @@ export function GalleryPage() {
                           className="rounded border px-1.5 py-0.5 font-mono text-[8px] tracking-wider transition-colors hover:bg-white/5"
                           style={{ borderColor: 'var(--c-line)', color: 'var(--c-text-faint)' }}
                           title={t('gallery.openProject')}
+                          aria-label={t('gallery.openProject')}
                         >
                           →
                         </button>
                       )}
-                      <button
-                        onClick={() => unfavorite(e)}
-                        className="rounded border px-1.5 py-0.5 font-mono text-[10px] leading-none transition-colors hover:bg-white/5"
-                        style={{ borderColor: 'color-mix(in srgb, var(--c-amber) 40%, transparent)', color: 'var(--c-amber)' }}
-                        title={t('archive.unfavorite')}
-                      >
-                        ★
-                      </button>
                     </div>
                   </div>
                 </div>

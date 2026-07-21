@@ -306,3 +306,24 @@ body::before {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* ============================================================
+   无障碍:respect prefers-reduced-motion
+   系统开了"减少动态效果"的用户(前庭障碍/晕动症敏感)不看到:
+   - xyFlow 连线 dash 流动 + status 灯闪烁
+   - 卡片 hover transform / scale
+   - flicker / fade-up 等装饰动画
+   功能性动画(进度条)保留——它们传递信息,不是装饰。
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .react-flow__edge.animated .react-flow__edge-path {
+    animation: none !important;
+    stroke-dasharray: none !important;
+  }
+}

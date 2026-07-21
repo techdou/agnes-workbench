@@ -7,6 +7,7 @@ const zh = {
   'common.rename': '重命名',
   'common.confirm': '确认',
   'common.close': '关闭',
+  'common.moreActions': '更多操作',
   'common.search': '搜索',
   'common.loading': '加载中…',
   'common.empty': '空',
@@ -172,6 +173,7 @@ const zh = {
   'archive.favorite': '收藏',
   'archive.unfavorite': '取消收藏',
   'archive.favoritedOnly': '只看收藏',
+  'archive.unfavoriteFailed': '取消收藏失败,请重试',
 
   // 全局画廊(/gallery)
   'gallery.title': '画廊',

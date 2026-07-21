@@ -291,10 +291,32 @@ async function doCache(
   });
 }
 
-// 根据 hash 取 manifest 条目
+// 根据 hash 取 manifest 条目(无所有权校验)
+// [H4] 警告:此函数不区分用户。main 分支单机无用户概念,可直接用;
+// 多用户部署必须改用 getEntryByUserHash(userId, hash) 或在 route 层加 admin 校验。
 export async function getEntryByHash(hash: string): Promise<ManifestEntry | undefined> {
   const manifest = await loadManifest();
   return manifest.entries[hash];
+}
+
+/**
+ * [M1] 迁移辅助:给所有 favorited=true 但没有 favoritedAt 的老条目回填时间
+ * 避免 listEntries 排序时新老混排无意义。
+ * 用 createdAt 作为 fallback(无法精确知道实际收藏时刻,但比无值好)
+ */
+export async function backfillFavoritedAt(): Promise<number> {
+  return withManifestLock(async () => {
+    const manifest = await loadManifest();
+    let count = 0;
+    for (const entry of Object.values(manifest.entries)) {
+      if (entry.favorited && !entry.favoritedAt) {
+        entry.favoritedAt = entry.createdAt;
+        count++;
+      }
+    }
+    if (count > 0) await saveManifest(manifest);
+    return count;
+  });
 }
 
 // 列出条目(按时间倒序)
@@ -305,16 +327,28 @@ export async function listEntries(
   onlyFavorited?: boolean
 ): Promise<ManifestEntry[]> {
   const manifest = await loadManifest();
-  let entries = Object.values(manifest.entries);
-  if (projectId) {
-    entries = entries.filter((e) => e.projectId === projectId);
+  return filterAndSortEntries(Object.values(manifest.entries), { projectId, onlyFavorited });
+}
+
+/**
+ * 纯函数:过滤 + 排序 manifest 条目(抽出来便于单测)
+ * - projectId 过滤本项目归档
+ * - onlyFavorited 只看收藏(跨项目,用于 /gallery)
+ * - 收藏视图按 favoritedAt 排序,普通视图按 createdAt;favoritedAt 缺失 fallback 到 createdAt
+ */
+export function filterAndSortEntries(
+  entries: ManifestEntry[],
+  opts: { projectId?: string; onlyFavorited?: boolean } = {}
+): ManifestEntry[] {
+  let result = [...entries];
+  if (opts.projectId) {
+    result = result.filter((e) => e.projectId === opts.projectId);
   }
-  if (onlyFavorited) {
-    entries = entries.filter((e) => e.favorited === true);
+  if (opts.onlyFavorited) {
+    result = result.filter((e) => e.favorited === true);
   }
-  // 收藏视图按 favoritedAt 排序(最近收藏在前),普通视图按 createdAt
-  const sortKey = onlyFavorited ? 'favoritedAt' : 'createdAt';
-  return entries.sort((a, b) => {
+  const sortKey = opts.onlyFavorited ? 'favoritedAt' : 'createdAt';
+  return result.sort((a, b) => {
     const ta = new Date((a[sortKey] as string | undefined) || a.createdAt).getTime();
     const tb = new Date((b[sortKey] as string | undefined) || b.createdAt).getTime();
     return tb - ta;

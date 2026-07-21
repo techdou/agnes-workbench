@@ -143,12 +143,29 @@ function FlowCanvasInner() {
   }, []);
 
   // NodeCreator 状态:拖连线到空白处松开时弹出
+  // pos 是屏幕定位字符串(left/top),在 setCreator 的事件回调里就算好(client 环境),
+  // 避免 NodeCreator 里用 effect 读 window 触发 Next 16 的 set-state-in-effect 报错
   const [creator, setCreator] = useState<{
     sourceType: string;
     sourceId: string;
-    screenPos: { x: number; y: number };  // 弹窗定位(屏幕坐标)
-    flowPos: { x: number; y: number };    // 新节点位置(画布坐标)
+    screenPos: { x: number; y: number };
+    flowPos: { x: number; y: number };
+    pos: { left: string; top: string };
   } | null>(null);
+
+  // 算 NodeCreator 弹窗的屏幕定位(窄屏居中,桌面用鼠标位置)
+  const computeCreatorPos = (screenPos: { x: number; y: number }): { left: string; top: string } => {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const panelW = Math.min(w < 640 ? w - 24 : 280, 280);
+    const left = w < 640
+      ? `${(w - panelW) / 2}px`
+      : `${Math.min(screenPos.x, w - 280)}px`;
+    const top = h < 640
+      ? `${Math.max(80, Math.floor(h / 4))}px`
+      : `${Math.min(screenPos.y, h - 340)}px`;
+    return { left, top };
+  };
 
   // 跟踪正在拖的连线起点(onConnectStart 记录,onConnectEnd 判断是否连到空白)
   const connectingSource = useRef<{ nodeId: string; handleType: string } | null>(null);
@@ -267,6 +284,7 @@ function FlowCanvasInner() {
         // NodeCreator 弹窗用屏幕坐标定位,新建节点用画布坐标
         screenPos: { x: clientX, y: clientY },
         flowPos,
+        pos: computeCreatorPos({ x: clientX, y: clientY }),
       });
     },
     [screenToFlowPosition]
@@ -285,6 +303,13 @@ function FlowCanvasInner() {
       longPressTimer.current = null;
     }
     longPressStart.current = null;
+  }, []);
+
+  // [M2] 组件卸载时清掉残留的长按定时器,避免 setContextMenu 调用已卸载组件的 setter
+  useEffect(() => {
+    return () => {
+      if (longPressTimer.current !== null) clearTimeout(longPressTimer.current);
+    };
   }, []);
 
   // 统一在画布外层 div 上监听 touch,通过 target 判断点的是节点还是空白
@@ -409,9 +434,10 @@ function FlowCanvasInner() {
         <ToastContainer />
 
         {/* 移动端底部工具条:撤销/重做(替代 Ctrl+Z/Ctrl+Shift+Z) */}
+        {/* [L1] 选中节点时让位:批量操作条在 bottom-6 居中,撤销条挪到 bottom-20 避免遮挡 */}
         {isTouchDevice && (
           <div
-            className="fixed bottom-6 left-6 z-30 flex flex-col gap-1.5 rounded-full border p-1 shadow-xl backdrop-blur-md"
+            className={`fixed left-6 z-30 flex flex-col gap-1.5 rounded-full border p-1 shadow-xl backdrop-blur-md transition-all ${selectedCount > 0 ? 'bottom-20' : 'bottom-6'}`}
             style={{
               borderColor: 'var(--c-line)',
               background: 'color-mix(in srgb, var(--c-ink) 95%, transparent)',
@@ -489,13 +515,14 @@ function FlowCanvasInner() {
 
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
-      {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
+      {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} isTouchDevice={isTouchDevice} />}
       {creator && (
         <NodeCreator
           sourceType={creator.sourceType}
           sourceId={creator.sourceId}
           screenPos={creator.screenPos}
           flowPos={creator.flowPos}
+          pos={creator.pos}
           onClose={() => setCreator(null)}
         />
       )}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useFlowStore } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
+import { GalleryVideo } from './MediaCard';
 
 interface Entry {
   hash: string;
@@ -140,58 +141,52 @@ export function LibraryPanel() {
             {entries.length > 0 && (
               <div className="grid grid-cols-2 gap-2">
                 {entries.map((e) => (
-                  <a
+                  // [C2] 卡片根用 div 不用 a,避免收藏按钮嵌在 a 内部产生事件竞争
+                  <div
                     key={e.hash}
-                    href={`/api/cache/${e.hash}`}
-                    download
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="group relative overflow-hidden rounded border transition-all"
                     style={{ borderColor: 'var(--c-edge)', background: 'var(--c-ink)' }}
                   >
-                    <div className="relative aspect-square overflow-hidden">
-                      {e.type === 'image' ? (
-                        <img src={`/api/cache/${e.hash}`} alt={e.prompt || ''} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
-                      ) : (
-                        <>
-                          <video
-                            src={`/api/cache/${e.hash}`}
-                            className="h-full w-full object-cover"
-                            muted
-                            preload="none"
-                          />
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                            <span className="font-mono text-lg text-white opacity-80">▶</span>
-                          </div>
-                        </>
-                      )}
-                      <span
-                        className="absolute left-1 top-1 rounded px-1 py-0.5 font-mono text-[8px] tracking-wider backdrop-blur-sm"
-                        style={{
-                          background: 'color-mix(in srgb, var(--c-void) 85%, transparent)',
-                          color: e.type === 'image' ? 'var(--c-phosphor)' : 'var(--c-amber)',
-                        }}
-                      >
-                        {e.type === 'image' ? 'IMG' : 'VID'}
-                      </span>
-                      {/* ★ 收藏按钮:绝对定位右上角,阻止冒泡防止触发 <a> 下载 */}
-                      <button
-                        onClick={(ev) => {
-                          ev.preventDefault();
-                          ev.stopPropagation();
-                          toggleFavorite(e.hash, !!e.favorited);
-                        }}
-                        className="absolute right-1 top-1 rounded px-1.5 py-0.5 font-mono text-[12px] leading-none backdrop-blur-sm transition-transform hover:scale-125"
-                        style={{
-                          background: 'color-mix(in srgb, var(--c-void) 85%, transparent)',
-                          color: e.favorited ? 'var(--c-amber)' : 'var(--c-text-faint)',
-                          textShadow: e.favorited ? '0 0 8px var(--c-bg-glow-1)' : 'none',
-                        }}
-                        title={e.favorited ? t('archive.unfavorite') : t('archive.favorite')}
-                      >
-                        {e.favorited ? '★' : '☆'}
-                      </button>
-                    </div>
+                    <a
+                      href={`/api/cache/${e.hash}`}
+                      download={`agnes-${e.type}-${e.hash.slice(0, 8)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block"
+                    >
+                      <div className="relative aspect-square overflow-hidden">
+                        {e.type === 'image' ? (
+                          <img src={`/api/cache/${e.hash}`} alt={e.prompt || ''} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+                        ) : (
+                          <GalleryVideo hash={e.hash} />
+                        )}
+                        <span
+                          className="absolute left-1 top-1 rounded px-1 py-0.5 font-mono text-[8px] tracking-wider backdrop-blur-sm"
+                          style={{
+                            background: 'color-mix(in srgb, var(--c-void) 85%, transparent)',
+                            color: e.type === 'image' ? 'var(--c-phosphor)' : 'var(--c-amber)',
+                          }}
+                        >
+                          {e.type === 'image' ? 'IMG' : 'VID'}
+                        </span>
+                      </div>
+                    </a>
+                    {/* ★ 收藏按钮:移出 <a>,DOM 兄弟节点,从根本上避免事件冒泡 */}
+                    <button
+                      onClick={() => toggleFavorite(e.hash, !!e.favorited)}
+                      className="absolute right-1 top-1 z-10 rounded px-1.5 py-0.5 font-mono text-[12px] leading-none backdrop-blur-sm transition-transform hover:scale-125"
+                      style={{
+                        background: 'color-mix(in srgb, var(--c-void) 85%, transparent)',
+                        color: e.favorited ? 'var(--c-amber)' : 'var(--c-text-faint)',
+                        // [L6] 不再借用 --c-bg-glow-1(琥珀色背景辉光),改用 amber 直接 mix
+                        textShadow: e.favorited ? '0 0 8px color-mix(in srgb, var(--c-amber) 40%, transparent)' : 'none',
+                      }}
+                      title={e.favorited ? t('archive.unfavorite') : t('archive.favorite')}
+                      aria-label={e.favorited ? t('archive.unfavorite') : t('archive.favorite')}
+                      aria-pressed={!!e.favorited}
+                    >
+                      {e.favorited ? '★' : '☆'}
+                    </button>
                     <div className="px-1.5 py-1.5">
                       <p className="line-clamp-2 font-[family-name:var(--font-display)] text-[10px] leading-tight" style={{ color: 'var(--c-text-dim)' }}>
                         {e.prompt || t('archive.noPrompt')}
@@ -200,7 +195,7 @@ export function LibraryPanel() {
                         {new Date(e.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                       </p>
                     </div>
-                  </a>
+                  </div>
                 ))}
               </div>
             )}

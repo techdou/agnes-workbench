@@ -13,10 +13,11 @@ interface NodeCreatorProps {
   sourceId: string;
   screenPos: { x: number; y: number }; // 弹窗定位(屏幕坐标)
   flowPos: { x: number; y: number };   // 新节点位置(画布坐标)
+  pos: { left: string; top: string };  // [C1] 定位由调用方在 client 事件里算好传入,避免 SSR 读 window
   onClose: () => void;
 }
 
-export function NodeCreator({ sourceType, sourceId, screenPos, flowPos, onClose }: NodeCreatorProps) {
+export function NodeCreator({ sourceType, sourceId, flowPos, pos, onClose }: NodeCreatorProps) {
   const t = useTranslation();
   const addNodeConnected = useFlowStore((s) => s.addNodeConnected);
   const [query, setQuery] = useState('');
@@ -69,7 +70,15 @@ export function NodeCreator({ sourceType, sourceId, screenPos, flowPos, onClose 
     }
   }
 
-  let runningIdx = -1;
+  // [M6] 预先把 filtered 拍平成 (item, globalIdx) 列表,避免嵌套 map 用 mutable runningIdx
+  // 这样 activeIdx 跟全局序号严格对应,提前 return/filter 都不会错位
+  const flatItems = filtered.map((item, idx) => ({ item, idx }));
+
+  // 按 group 分组渲染,但 idx 来自拍平后的全局序号
+  const grouped = NODE_GROUP_ORDER.map((group) => ({
+    group,
+    items: flatItems.filter(({ item }) => item.group === group),
+  })).filter((g) => g.items.length > 0);
 
   return (
     <>
@@ -80,12 +89,8 @@ export function NodeCreator({ sourceType, sourceId, screenPos, flowPos, onClose 
       <div
         className="fixed z-[96] w-[92vw] max-w-[280px] overflow-hidden rounded-lg border shadow-2xl sm:w-64"
         style={{
-          left: typeof window !== 'undefined' && window.innerWidth < 640
-            ? `${(window.innerWidth - Math.min(window.innerWidth - 24, 280)) / 2}px`
-            : Math.min(screenPos.x, window.innerWidth - 280),
-          top: typeof window !== 'undefined' && window.innerHeight < 640
-            ? `${Math.max(80, window.innerHeight / 4)}px`
-            : Math.min(screenPos.y, window.innerHeight - 340),
+          left: pos.left,
+          top: pos.top,
           borderColor: 'var(--c-line)',
           background: 'var(--c-ink)',
           animation: 'fade-up 0.12s ease-out',
@@ -114,54 +119,48 @@ export function NodeCreator({ sourceType, sourceId, screenPos, flowPos, onClose 
 
         {/* 结果列表 */}
         <div className="max-h-[280px] overflow-y-auto p-1.5">
-          {filtered.length === 0 ? (
+          {flatItems.length === 0 ? (
             <div className="py-6 text-center">
               <span className="font-mono text-[11px]" style={{ color: 'var(--c-text-ghost)' }}>
                 {t('creator.empty')}
               </span>
             </div>
           ) : (
-            NODE_GROUP_ORDER.map((group) => {
-              const groupItems = filtered.filter((i) => i.group === group);
-              if (groupItems.length === 0) return null;
-              return (
-                <div key={group} className="mb-1">
-                  <div className="px-2 py-1 font-mono text-[8px] tracking-[0.2em]" style={{ color: 'var(--c-text-faint)' }}>
-                    {t(NODE_GROUP_LABEL_KEY[group])}
-                  </div>
-                  {groupItems.map((item) => {
-                    runningIdx++;
-                    const idx = runningIdx;
-                    const isActive = idx === activeIdx;
-                    return (
-                      <button
-                        key={item.type}
-                        onClick={() => create(item.type)}
-                        onMouseEnter={() => setActiveIdx(idx)}
-                        className="flex w-full items-center gap-2.5 rounded px-2 py-2 text-left transition-colors sm:py-1.5"
-                        style={{
-                          background: isActive ? 'color-mix(in srgb, var(--c-phosphor) 12%, transparent)' : 'transparent',
-                          borderLeft: `2px solid ${isActive ? 'var(--c-phosphor)' : 'transparent'}`,
-                        }}
-                      >
-                        <span
-                          className="w-4 text-center font-mono text-[13px]"
-                          style={{ color: isActive ? 'var(--c-phosphor)' : 'var(--c-text-dim)' }}
-                        >
-                          {item.sigil}
-                        </span>
-                        <span
-                          className="font-[family-name:var(--font-display)] text-[12px]"
-                          style={{ color: isActive ? 'var(--c-text)' : 'var(--c-text-dim)' }}
-                        >
-                          {t(item.labelKey)}
-                        </span>
-                      </button>
-                    );
-                  })}
+            grouped.map(({ group, items }) => (
+              <div key={group} className="mb-1">
+                <div className="px-2 py-1 font-mono text-[8px] tracking-[0.2em]" style={{ color: 'var(--c-text-faint)' }}>
+                  {t(NODE_GROUP_LABEL_KEY[group])}
                 </div>
-              );
-            })
+                {items.map(({ item, idx }) => {
+                  const isActive = idx === activeIdx;
+                  return (
+                    <button
+                      key={item.type}
+                      onClick={() => create(item.type)}
+                      onMouseEnter={() => setActiveIdx(idx)}
+                      className="flex w-full items-center gap-2.5 rounded px-2 py-2 text-left transition-colors sm:py-1.5"
+                      style={{
+                        background: isActive ? 'color-mix(in srgb, var(--c-phosphor) 12%, transparent)' : 'transparent',
+                        borderLeft: `2px solid ${isActive ? 'var(--c-phosphor)' : 'transparent'}`,
+                      }}
+                    >
+                      <span
+                        className="w-4 text-center font-mono text-[13px]"
+                        style={{ color: isActive ? 'var(--c-phosphor)' : 'var(--c-text-dim)' }}
+                      >
+                        {item.sigil}
+                      </span>
+                      <span
+                        className="font-[family-name:var(--font-display)] text-[12px]"
+                        style={{ color: isActive ? 'var(--c-text)' : 'var(--c-text-dim)' }}
+                      >
+                        {t(item.labelKey)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))
           )}
         </div>
       </div>

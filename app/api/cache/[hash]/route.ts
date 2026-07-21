@@ -57,11 +57,29 @@ export async function GET(
 
 // PATCH /api/cache/[hash] —— 切换收藏状态
 // body: { favorited: boolean }
+// [H3] 同源校验:拒绝跨站请求(防 CSRF),main 无用户系统无法做登录态校验,
+// 至少挡住别的域名构造的简单 POST。Fetch API 默认带 same-origin credentials,
+// 正常前端调用会自动通过。
+function isSameOrigin(req: NextRequest): boolean {
+  const origin = req.headers.get('origin');
+  const host = req.headers.get('host');
+  if (!origin || !host) return false;
+  try {
+    const u = new URL(origin);
+    return u.host === host;
+  } catch {
+    return false;
+  }
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ hash: string }> }
 ) {
   try {
+    if (!isSameOrigin(req)) {
+      return NextResponse.json({ error: '跨站请求被拒绝' }, { status: 403 });
+    }
     const { hash } = await params;
     if (!/^[0-9a-f]{1,32}$/.test(hash)) {
       return NextResponse.json({ error: '非法 hash' }, { status: 400 });
