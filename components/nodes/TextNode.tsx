@@ -48,18 +48,63 @@ export function TextNode({ id, data }: { id: string; data: TextNodeData }) {
         </div>
       </div>
 
-      <label
-        className="flex cursor-pointer items-center gap-2 font-mono text-[10px] transition-colors"
-        style={{ color: 'var(--c-text-dim)' }}
-      >
-        <input
-          type="checkbox"
-          checked={!!data.enhance}
-          onChange={(e) => update(id, { enhance: e.target.checked })}
-          style={{ accentColor: 'var(--c-amber)' }}
-        />
-        {t('node.augment')}
-      </label>
+      {/* 两个勾选框并排:扩写 + 中文摘要 */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <label
+          className="flex cursor-pointer items-center gap-2 font-mono text-[10px] transition-colors"
+          style={{ color: 'var(--c-text-dim)' }}
+        >
+          <input
+            type="checkbox"
+            checked={!!data.enhance}
+            onChange={(e) => update(id, { enhance: e.target.checked })}
+            style={{ accentColor: 'var(--c-amber)' }}
+          />
+          {t('node.augment')}
+        </label>
+
+        {/* 中文摘要:只在勾了扩写时可用(摘要依赖扩写结果) */}
+        <label
+          className={`flex items-center gap-2 font-mono text-[10px] transition-colors ${
+            data.enhance ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'
+          }`}
+          style={{ color: 'var(--c-text-dim)' }}
+          title={!data.enhance ? t('node.summaryNeedsAugment') : undefined}
+        >
+          <input
+            type="checkbox"
+            checked={!!data.withSummary}
+            disabled={!data.enhance}
+            onChange={(e) => update(id, { withSummary: e.target.checked })}
+            style={{ accentColor: 'var(--c-amber)' }}
+          />
+          {t('node.summary')}
+        </label>
+      </div>
+
+      {/* 中文摘要展示区:仅展示,不传下游(textarea 不绑 text 字段) */}
+      {data.summary && (
+        <div
+          className="rounded border-l-2 px-2.5 py-1.5"
+          style={{
+            borderColor: 'var(--c-phosphor)',
+            background: 'color-mix(in srgb, var(--c-phosphor) 8%, transparent)',
+          }}
+        >
+          <div
+            className="mb-1 font-mono text-[8px] tracking-[0.2em] uppercase"
+            style={{ color: 'var(--c-phosphor)' }}
+          >
+            {t('node.summaryLabel')}
+          </div>
+          <p
+            className="text-[12px] leading-relaxed"
+            style={{ color: 'var(--c-text-dim)', fontFamily: 'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif' }}
+          >
+            {data.summary}
+          </p>
+        </div>
+      )}
     </NodeShell>
   );
 }

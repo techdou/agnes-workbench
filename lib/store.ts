@@ -657,16 +657,50 @@ async function executeNode(id: string, opts?: { silent?: boolean }): Promise<voi
 
     // 1. 文本节点
     if (nodeType === 'text') {
-      const d = target.data as { text?: string; enhance?: boolean; targetType?: string };
+      const d = target.data as {
+        text?: string;
+        enhance?: boolean;
+        targetType?: string;
+        withSummary?: boolean;
+      };
       const text = d.text || '';
       if (!text) throw new Error(t('node.emptyText'));
       // 结构化扩写:按 targetType 选模板(auto 自动检测下游)
       if (d.enhance) {
         const targetType = resolveTargetType(d.targetType || 'auto', nodes, edges, id);
         const systemPrompt = buildEnhanceSystemPrompt(targetType);
-        const expanded = await callText(text, systemPrompt);
+
+        // [中文摘要] 并行:扩写 + 翻译(把扩写结果翻成中文摘要)
+        // 用 Promise 包装让两者同时跑,翻译失败不阻断扩写
+        let expanded: string;
+        let summary: string | undefined;
+        if (d.withSummary) {
+          // 先扩写,拿到英文再翻成中文(翻译依赖扩写结果,所以是串行)
+          // 注:试过并行(扩写 + 原文翻译),但原文翻译会丢掉扩写加的结构化词,
+          // 摘要意义是"让用户看懂最终 prompt 说了啥",所以必须翻扩写后的
+          expanded = await callText(text, systemPrompt);
+          if (cancelled) return;
+          try {
+            summary = await callText(
+              expanded,
+              'Translate the user image/video generation prompt into fluent Chinese (简体中文). ' +
+                'Preserve all concrete visual details, style words, camera motion, lighting, ' +
+                'composition constraints. Return only the Chinese translation, no explanations.'
+            );
+            if (cancelled) return;
+          } catch {
+            // 翻译失败不阻断扩写,摘要留空
+            summary = undefined;
+          }
+          updateNodeData(id, { text: expanded, summary, status: 'done' });
+          return;
+        }
+
+        // 普通扩写(不要摘要)
+        expanded = await callText(text, systemPrompt);
         if (cancelled) return;
-        updateNodeData(id, { text: expanded, status: 'done' });
+        // 关掉过摘要后,清掉旧的 summary 避免展示过期内容
+        updateNodeData(id, { text: expanded, summary: undefined, status: 'done' });
         return;
       }
       updateNodeData(id, { status: 'done' });
