@@ -6,10 +6,10 @@
 [![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
 [![React Flow](https://img.shields.io/badge/@xyflow/react-12-blue)](https://reactflow.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6)](https://www.typescriptlang.org/)
-[![Vitest](https://img.shields.io/badge/Tests-34%20passed-brightgreen)](lib/__tests__/)
+[![Vitest](https://img.shields.io/badge/Tests-50%20passed-brightgreen)](lib/__tests__/)
 [![CI](https://github.com/techdou/agnes-workbench/actions/workflows/ci.yml/badge.svg)](https://github.com/techdou/agnes-workbench/actions/workflows/ci.yml)
 
-通过拖拽节点、连线编排,一句话驱动 Agnes 的文本、图片、视频全模态生成能力。支持项目管理、工作流导入导出、多图参考融合、结构化 prompt 扩写 + 中文摘要、★ 全局画廊收藏、移动端触屏适配、撤销/重做、中英双语。
+通过拖拽节点、连线编排,一句话驱动 Agnes 的文本、图片、视频全模态生成能力。支持项目管理、工作流导入导出、多图参考融合、结构化 prompt 扩写(英文/中文输出可选)、★ 全局画廊收藏、移动端触屏适配、撤销/重做、中英双语。
 
 ## 🖼️ 演示
 
@@ -36,7 +36,7 @@
 
 | 节点 | 符号 | 能力 |
 |------|------|------|
-| 文本 | Τ | prompt 输入 + 结构化扩写(按目标类型选模板)+ 可选中文摘要 |
+| 文本 | Τ | prompt 输入 + 结构化扩写(按目标类型选模板)+ 英文/中文输出可选 |
 | 上传图片 | ↥ | 拖拽/点击上传本地图,hash 去重 |
 | 文生图 | ℑ | 文本 → 图片 |
 | 图生图 | ℜ | 多图参考融合编辑(支持 @节点引用) |
@@ -47,7 +47,7 @@
 | 图片预览 | ▣ | 展示 + 下载 |
 | 视频预览 | ▶ | 展示 + 下载 |
 
-### 结构化 Prompt 扩写 + 中文摘要
+### 结构化 Prompt 扩写 + 输出语言
 
 文本节点勾选「结构化扩写」后,按**目标类型**自动选模板生成专业 prompt(参照 [OpenAI Cookbook](https://developers.openai.com/cookbook/examples/multimodal/image-gen-models-prompting-guide) 规范):
 
@@ -57,7 +57,12 @@
 - **图生视频**:锚定帧 + 运动 + 相机
 - **自动检测**:根据下游连线节点类型自动选模板
 
-勾选「中文摘要」后,扩写完成会**额外调一次 LLM 把扩写后的英文 prompt 翻成简体中文**,展示在节点底部磷光绿色块里。**只给人看,不传下游**——下游节点拿到的还是英文 prompt。
+扩写结果的**输出语言**由「输出中文」勾选框控制(需先勾选「结构化扩写」):
+
+- 不勾(默认)—— 扩写出**英文 prompt**,熟英语用户直接用英文扩写、生图
+- 勾选 —— 扩写出**简体中文 prompt**,不熟英语用户在中文基础上扩写、生图
+
+实现上只切换模板里的"输出语言"指令(单次 LLM 调用),结构化视觉描述方法论不变;扩写后的 prompt 直接写进 `text` 字段,传给下游节点。
 
 ### @节点引用(多图精确指定)
 
@@ -142,13 +147,13 @@ npm run dev
 4. **运行** — 点节点底部 EXECUTE,自动先跑完上游
 5. **归档** — 右侧 ARCHIVE 查看本项目作品;点 ☆ 收藏 → 首页 ★ Gallery 看全部收藏
 
-### 文本节点扩写 + 中文摘要
+### 文本节点扩写 + 输出语言
 
 1. 加文本节点,写 prompt
 2. 选「扩写目标」(auto / 文生图 / 文生视频 / 图生图 / 图生视频)
 3. 勾选「结构化扩写」
-4. 想看中文意思?勾「中文摘要」(依赖扩写)
-5. 点 AUGMENT → 按目标类型的专业模板生成英文 prompt + 中文摘要展示在底部
+4. 不熟英语?勾「输出中文」(依赖扩写)→ 扩写直接输出中文 prompt
+5. 点 AUGMENT → 按目标类型专业模板生成 prompt(语言取决于上一步)
 
 ### 多图融合
 
@@ -184,7 +189,7 @@ npm run dev
 | i18n | 自建轻量方案 | 中英双语,零依赖 |
 | 字体 | Fraunces + JetBrains Mono | 衬线 + 等宽,本地化 |
 | API | Agnes AI | OpenAI 兼容协议 |
-| 测试 | Vitest | 34 个单测(4 个测试文件) |
+| 测试 | Vitest | 50 个单测(6 个测试文件) |
 
 **零 Python 依赖,全 TypeScript。**
 
@@ -318,7 +323,7 @@ multi-user 分支需要额外的环境变量(`DATABASE_URL` / `AUTH_SECRET` / `E
 ## 🧪 测试
 
 ```bash
-npm test          # 跑全部 34 个单测
+npm test          # 跑全部 50 个单测
 npm run lint      # ESLint(0 error)
 npx tsc --noEmit  # 类型检查(0 error)
 ```
@@ -328,6 +333,8 @@ npx tsc --noEmit  # 类型检查(0 error)
 - `prompt-resolve.test.ts` — @引用解析、目标类型检测
 - `store.test.ts` — 节点推荐列表
 - `cache.test.ts` — 过滤排序纯函数(projectId/收藏/组合/老数据 fallback)
+- `agnes.test.ts` — Agnes API 客户端(URL 提取、状态判定、错误兜底)
+- `prompt-templates.test.ts` — 结构化扩写模板(各目标类型 + 中英文输出语言)
 
 ## 📝 License
 

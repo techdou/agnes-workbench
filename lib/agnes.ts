@@ -186,12 +186,13 @@ function extractImageUrls(data: AgnesJson): string[] {
 // 文生图
 export async function textToImage(prompt: string, size = '1024x768', ctx?: CallContext): Promise<ImageResult> {
   const englishPrompt = await translatePromptToEnglish(prompt, ctx);
+  // [Robust] 图像生成单次实测 10~30s,留 90s 余量;默认 120s 卡太久体验差
   const data = await requestJson<AgnesJson>('POST', '/v1/images/generations', {
     model: ctx?.imageModel || DEFAULT_IMAGE_MODEL,
     prompt: englishPrompt,
     size,
     extra_body: { response_format: 'url' },
-  }, ctx?.apiKey, 120000, ctx?.baseUrl);
+  }, ctx?.apiKey, 90000, ctx?.baseUrl);
   return { urls: extractImageUrls(data), raw: data };
 }
 
@@ -203,6 +204,7 @@ export async function imageToImage(
   ctx?: CallContext
 ): Promise<ImageResult> {
   const englishPrompt = await translatePromptToEnglish(prompt, ctx);
+  // [Robust] 图像生成单次实测 10~30s,留 90s 余量;默认 120s 卡太久体验差
   const data = await requestJson<AgnesJson>('POST', '/v1/images/generations', {
     model: ctx?.imageModel || DEFAULT_IMAGE_MODEL,
     prompt: englishPrompt,
@@ -211,7 +213,7 @@ export async function imageToImage(
       image: inputImageUrls,
       response_format: 'url',
     },
-  }, ctx?.apiKey, 120000, ctx?.baseUrl);
+  }, ctx?.apiKey, 90000, ctx?.baseUrl);
   return { urls: extractImageUrls(data), raw: data };
 }
 
@@ -360,18 +362,31 @@ export function createMultiImageVideo(
 // ---------- 视频状态查询 ----------
 
 export interface VideoStatusResult {
-  status: 'queued' | 'in_progress' | 'completed' | 'failed' | string;
+  // [BugFix] 实测 Agnes 不同路径返回的 status 值不同:
+  // /v1/videos/{id}: queued | in_progress | completed | failed
+  // /agnesapi: pending | inference | completed | failed
+  // 这里用 string 兜底,只关心终态 completed/failed
+  status: 'queued' | 'pending' | 'in_progress' | 'inference' | 'completed' | 'failed' | string;
   progress?: number;
   url?: string; // 完成时的下载 URL
   error?: string;
   raw: unknown;
 }
 
-function extractVideoUrl(data: AgnesJson): string | undefined {
+// 导出供单元测试验证 URL 提取逻辑(不依赖网络)
+export function extractVideoUrl(data: AgnesJson): string | undefined {
   // [H4] 删掉 remixed_from_video_id:语义是"源视频 ID"不是下载 URL,
   // 服务商哪天把它写成 URL 会把别人的源视频 URL 当下载链接返回
+  // [BugFix] Agnes 在 /v1/videos/{id} 路径完成态把 URL 藏在 metadata.url,
+  // 顶层没有 url 字段——实测验证,必须兜底查 metadata。
   for (const key of ['video_url', 'url']) {
     const v = data?.[key];
+    if (typeof v === 'string' && /^https?:\/\//.test(v)) return v;
+  }
+  // [BugFix] 兜底:metadata.url(实测 task 路径完成态返回结构)
+  const meta = data?.metadata;
+  if (meta && typeof meta === 'object') {
+    const v = (meta as AgnesJson)?.url;
     if (typeof v === 'string' && /^https?:\/\//.test(v)) return v;
   }
   if (Array.isArray(data?.data)) {

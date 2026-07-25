@@ -30,10 +30,9 @@ export interface TextNodeData extends BaseNodeData {
   enhance?: boolean;
   // 扩写目标类型:决定使用哪种 prompt 模板(场景/主体/细节/构图/约束)
   targetType?: PromptTarget;
-  // 可选:扩写时同时生成中文摘要(仅展示,不传下游)
-  withSummary?: boolean;
-  // 扩写后的中文摘要(用户读,不进入下游 prompt)
-  summary?: string;
+  // 可选:扩写输出语言。不勾=英文(默认),勾=中文
+  // 用户可选:不熟英语→勾中文,直接用中文扩写和生图;熟英语→不勾,英文扩写
+  outputChinese?: boolean;
 }
 
 export interface TextToImageData extends BaseNodeData {

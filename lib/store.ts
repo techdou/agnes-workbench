@@ -65,16 +65,99 @@ function friendlyApiError(status: number, msg: string): string {
   return msg;
 }
 
+// [Robust] 识别网络层错误:fetch 抛 TypeError("Failed to fetch") 或 AbortError(超时)
+// 这些都值得重试,不该当成业务错误抛给用户
+function isNetworkError(err: unknown): boolean {
+  if (err instanceof Error) {
+    const name = err.name;
+    const msg = err.message;
+    if (name === 'AbortError') return true;                  // 超时(我们的 AbortController)
+    if (name === 'TypeError') return true;                   // Failed to fetch / 网络断开
+    if (/Failed to fetch|NetworkError|networkerror/i.test(msg)) return true;
+  }
+  return false;
+}
+
+// [Robust] 带超时 + 指数退避重试的 fetch 封装
+// - 每次 attempt 独立 AbortController 控制超时
+// - 网络错误/5xx/429 自动重试,鉴权/参数错误不重试
+// - 429 优先读 Retry-After 头,退避上限 30s
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit & { timeoutMs?: number } = {},
+  retries = 2
+): Promise<Response> {
+  const { timeoutMs = 100000, ...init } = options;
+  const baseBackoffs = [1000, 3000]; // 第 1 次重试等 1s,第 2 次等 3s
+
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    // 合并外部 signal(如节点取消)和超时 signal:任一触发都中止
+    const externalSignal = init.signal;
+    const onExternalAbort = () => controller.abort();
+    if (externalSignal) {
+      if (externalSignal.aborted) controller.abort();
+      else externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+    }
+    try {
+      const resp = await fetch(url, { ...init, signal: controller.signal });
+
+      // 4xx 非限流:不重试,直接返回(让上层友好化处理)
+      if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
+        return resp;
+      }
+      // 5xx / 429:可重试。若是最后一次尝试,也直接返回让上层报错
+      if ((resp.status >= 500 || resp.status === 429) && attempt < retries) {
+        let waitMs = baseBackoffs[attempt] ?? 3000;
+        // 429 优先用 Retry-After(秒),但封顶 30s
+        if (resp.status === 429) {
+          const retryAfter = resp.headers.get('Retry-After');
+          if (retryAfter) {
+            const parsed = parseInt(retryAfter, 10);
+            if (!isNaN(parsed)) waitMs = Math.min(parsed * 1000, 30000);
+          }
+        }
+        // jitter ±200ms,避免雷同性并发重试
+        const jitter = (Math.random() - 0.5) * 400;
+        await new Promise((r) => setTimeout(r, waitMs + jitter));
+        continue;
+      }
+      return resp;
+    } catch (err) {
+      lastErr = err;
+      // 非网络错误(业务异常/编程错误)直接抛,别浪费时间重试
+      if (!isNetworkError(err)) throw err;
+      if (attempt < retries) {
+        const waitMs = baseBackoffs[attempt] ?? 3000;
+        const jitter = (Math.random() - 0.5) * 400;
+        await new Promise((r) => setTimeout(r, waitMs + jitter));
+        continue;
+      }
+    } finally {
+      clearTimeout(timer);
+      if (externalSignal) externalSignal.removeEventListener('abort', onExternalAbort);
+    }
+  }
+  // 重试耗尽:抛网络错误,上层 friendlyApiError 会转成中文提示
+  throw lastErr instanceof Error
+    ? new Error(`网络请求失败(已重试 ${retries} 次):${lastErr.message}`)
+    : new Error(`网络请求失败(已重试 ${retries} 次)`);
+}
+
 async function callImage(
   mode: 'text-to-image' | 'image-to-image',
   prompt: string,
   size: string,
   inputImageUrls?: string[]
 ): Promise<{ urls: string[] }> {
-  const resp = await fetch('/api/agnes/image', {
+  // [Robust] 图像生成端到端含翻译,实测 10~30s,客户端 100s 超时 + 2 次重试
+  const resp = await fetchWithRetry('/api/agnes/image', {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify({ mode, prompt, size, inputImageUrls, ...modelParams() }),
+    timeoutMs: 100000,
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
@@ -84,10 +167,12 @@ async function callImage(
 }
 
 async function callText(prompt: string, system?: string): Promise<string> {
-  const resp = await fetch('/api/agnes/text', {
+  // [Robust] LLM 文本生成通常较快,60s 超时足够;扩写场景偶发慢响应靠重试兜底
+  const resp = await fetchWithRetry('/api/agnes/text', {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify({ prompt, system, temperature: 0.7, ...modelParams() }),
+    timeoutMs: 60000,
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
@@ -99,10 +184,12 @@ async function callText(prompt: string, system?: string): Promise<string> {
 }
 
 async function callVideoCreate(body: Record<string, unknown>): Promise<{ videoId?: string; id?: string; status: string }> {
-  const resp = await fetch('/api/agnes/video/create', {
+  // [Robust] 视频任务创建实测 <1s,但偶有排队,60s 超时 + 2 次重试
+  const resp = await fetchWithRetry('/api/agnes/video/create', {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify({ ...body, ...modelParams() }),
+    timeoutMs: 60000,
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
@@ -116,9 +203,12 @@ async function callVideoStatus(id: string): Promise<{ status: string; progress?:
   const params = new URLSearchParams({ id });
   if (s.videoModel) params.set('videoModel', s.videoModel);
   if (s.baseUrl) params.set('baseUrl', s.baseUrl);
-  const resp = await fetch(`/api/agnes/video/status?${params}`, {
+  // [Robust] 状态查询要快(轮询高频),30s 超时 + 仅 1 次重试;
+  // 不多重试避免和上层 pollVideo 轮询叠加拖慢单次查询
+  const resp = await fetchWithRetry(`/api/agnes/video/status?${params}`, {
     headers: authHeaders(),
-  });
+    timeoutMs: 30000,
+  }, 1);
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     throw new Error(friendlyApiError(resp.status, err.error || `HTTP ${resp.status}`));
@@ -661,46 +751,20 @@ async function executeNode(id: string, opts?: { silent?: boolean }): Promise<voi
         text?: string;
         enhance?: boolean;
         targetType?: string;
-        withSummary?: boolean;
+        outputChinese?: boolean;
       };
       const text = d.text || '';
       if (!text) throw new Error(t('node.emptyText'));
-      // 结构化扩写:按 targetType 选模板(auto 自动检测下游)
+      // 结构化扩写:按 targetType 选模板 + 按语言选输出语言
       if (d.enhance) {
         const targetType = resolveTargetType(d.targetType || 'auto', nodes, edges, id);
-        const systemPrompt = buildEnhanceSystemPrompt(targetType);
+        const language = d.outputChinese ? 'zh' : 'en' as const;
+        const systemPrompt = buildEnhanceSystemPrompt(targetType, language);
 
-        // [中文摘要] 串行执行:扩写完再翻译扩写结果
-        // 必须串行不能并行——翻译依赖扩写结果。如果并行翻原文,
-        // 扩写加的结构化词(bokeh/cinematic/rule of thirds)会丢,
-        // 摘要失去"让用户看懂最终 prompt 说了啥"的意义。
-        // 翻译失败不阻断扩写:catch 里 summary=undefined,扩写结果照常保存。
-        let expanded: string;
-        let summary: string | undefined;
-        if (d.withSummary) {
-          expanded = await callText(text, systemPrompt);
-          if (cancelled) return;
-          try {
-            summary = await callText(
-              expanded,
-              'Translate the user image/video generation prompt into fluent Chinese (简体中文). ' +
-                'Preserve all concrete visual details, style words, camera motion, lighting, ' +
-                'composition constraints. Return only the Chinese translation, no explanations.'
-            );
-            if (cancelled) return;
-          } catch {
-            // 翻译失败不阻断扩写,摘要留空
-            summary = undefined;
-          }
-          updateNodeData(id, { text: expanded, summary, status: 'done' });
-          return;
-        }
-
-        // 普通扩写(不要摘要)
-        expanded = await callText(text, systemPrompt);
+        // 单次调用:扩写结果直接是用户选定语言的 prompt,写进 text 传下游
+        const expanded = await callText(text, systemPrompt);
         if (cancelled) return;
-        // 关掉过摘要后,清掉旧的 summary 避免展示过期内容
-        updateNodeData(id, { text: expanded, summary: undefined, status: 'done' });
+        updateNodeData(id, { text: expanded, status: 'done' });
         return;
       }
       updateNodeData(id, { status: 'done' });
@@ -864,6 +928,8 @@ function cancelRun(id: string) {
 }
 
 // [C3+M10] 视频轮询:指数退避(2→4→8→封顶30秒)+ 取消检查
+// [Robust] 单次状态查询失败容错:连续失败累计 5 次才判定任务失败,
+// 避免偶发网络抖动直接终止整个轮询(callVideoStatus 内层已有 1 次重试)
 async function pollVideo(
   videoId: string,
   nodeId: string,
@@ -872,13 +938,27 @@ async function pollVideo(
   const deadline = Date.now() + 900000; // 15 分钟
   let interval = 2000;
   const update = useFlowStore.getState().updateNodeData;
+  let consecutiveErrors = 0; // [Robust] 连续错误计数
+  const MAX_CONSECUTIVE_ERRORS = 5;
 
   while (Date.now() < deadline) {
     if (isCancelled()) throw new Error(t('toast.runCancelled'));
     await new Promise((r) => setTimeout(r, interval));
     if (isCancelled()) throw new Error(t('toast.runCancelled'));
 
-    const st = await callVideoStatus(videoId);
+    let st: { status: string; progress?: number; url?: string; error?: string };
+    try {
+      st = await callVideoStatus(videoId);
+      consecutiveErrors = 0; // 成功一次就清零
+    } catch (err) {
+      consecutiveErrors++;
+      if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+        // 连续 5 次失败,判定任务真挂了
+        throw err;
+      }
+      // 否则跳过这次,继续下一轮轮询(不更新 progress,避免 UI 抖动)
+      continue;
+    }
     update(nodeId, { progress: typeof st.progress === 'number' ? st.progress : 0 });
 
     if (st.status === 'completed') return { url: st.url };
