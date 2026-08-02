@@ -11,12 +11,31 @@ import type { PromptTarget } from './types';
 /**
  * 构建扩写 system prompt:根据目标类型返回不同的结构化指令
  * 用户输入(idea)由调用方拼到 user role
+ *
+ * @param target 目标类型(文生图/文生视频/图生图/图生视频/auto)
+ * @param language 输出语言:'en'(默认)或 'zh'。
+ *   - 'en':英文 prompt(熟英语用户,直接用英文扩写生图)
+ *   - 'zh':中文 prompt(不熟英语用户,在中文基础上扩写和生图)
+ *   注意:这里只改模板里的"输出语言"指令,结构化视觉描述要求保持一致——
+ *   因为场景/主体/细节/构图/约束这套方法论是通用的,跟语言无关。
  */
-export function buildEnhanceSystemPrompt(target: PromptTarget | string): string {
+export function buildEnhanceSystemPrompt(
+  target: PromptTarget | string,
+  language: 'en' | 'zh' = 'en'
+): string {
   const base = 'You are an expert prompt engineer for AI image/video generation. ';
   const task = TASK_PROMPTS[target] || TASK_PROMPTS.auto;
+  // 中文模式:把英文输出指令替换成中文输出指令,其余不变
+  if (language === 'zh') {
+    return base + task.replace(ENGLISH_OUTPUT_INSTRUCTION, CHINESE_OUTPUT_INSTRUCTION);
+  }
   return base + task;
 }
+
+// 语言输出指令片段(在模板里反复出现,需要批量替换)
+const ENGLISH_OUTPUT_INSTRUCTION = 'Output ONLY the English prompt, no explanations';
+const CHINESE_OUTPUT_INSTRUCTION =
+  'Output ONLY the Chinese (简体中文) prompt, no explanations, no English words unless they are proper nouns or technical terms';
 
 // ---------- 各目标类型的模板 ----------
 

@@ -3,6 +3,10 @@
 
 import type { NodeType } from './types';
 
+// 节点视觉尺寸(单一来源,CommandPalette 视角中心对齐 + NodeShell 渲染共用)
+export const NODE_WIDTH = 300;
+export const NODE_HEIGHT = 160; // 大致高度(内容可变,取典型值)
+
 export type NodeGroup = 'input' | 'image' | 'video' | 'output';
 
 export interface NodeMeta {

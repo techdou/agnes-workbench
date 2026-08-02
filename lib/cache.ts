@@ -237,20 +237,73 @@ async function doCache(
     assertSafeLocalPath(localPath);
     fullPath = path.join(LIBRARY_DIR, localPath);
 
-    const resp = await fetch(url);
+    // 下载 + 大小限制(防止大视频 OOM)
+    // [BugFix] 1. 加超时(防慢速攻击挂死 manifest 锁)
+    //          2. 禁止自动重定向 + 手动校验最终 URL(防重定向 SSRF)
+    //          3. 流式读取边累计边校验大小(防无 Content-Length 的 OOM)
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+    let resp: Response;
+    try {
+      resp = await fetch(url, { signal: controller.signal, redirect: 'manual' });
+    } finally {
+      clearTimeout(timer);
+    }
+
+    // [BugFix] 手动跟随重定向,每跳都重新跑 SSRF + DNS 校验
+    let hops = 0;
+    while (resp.status >= 300 && resp.status < 400 && resp.headers.get('location') && hops < 5) {
+      const redirectUrl = new URL(resp.headers.get('location')!, url).href;
+      assertSafeUrl(redirectUrl);
+      await assertSafeDns(new URL(redirectUrl).hostname);
+      const redirectController = new AbortController();
+      const redirectTimer = setTimeout(() => redirectController.abort(), 30000);
+      try {
+        resp = await fetch(redirectUrl, { signal: redirectController.signal, redirect: 'manual' });
+      } finally {
+        clearTimeout(redirectTimer);
+      }
+      url = redirectUrl;
+      hops++;
+    }
+    if (resp.status >= 300 && resp.status < 400) {
+      throw new Error('下载失败: 重定向次数超过 5 次,疑似无限重定向');
+    }
+
     if (!resp.ok) {
-      throw new Error(`下载失败: HTTP ${resp.status} ${url}`);
+      throw new Error(`下载失败: HTTP ${resp.status}`);
     }
     const contentLength = Number(resp.headers.get('content-length') || 0);
     if (contentLength > MAX_FILE_SIZE) {
       throw new Error(`文件过大(${(contentLength / 1024 / 1024).toFixed(1)}MB),超过 ${MAX_FILE_SIZE / 1024 / 1024}MB 限制`);
     }
-    const buf = Buffer.from(await resp.arrayBuffer());
-    if (buf.length > MAX_FILE_SIZE) {
-      throw new Error(`文件过大(${(buf.length / 1024 / 1024).toFixed(1)}MB),超过 ${MAX_FILE_SIZE / 1024 / 1024}MB 限制`);
+    // [BugFix] 流式读取 + 累计大小校验(无 Content-Length 时也能在超限时及时中断)
+    const reader = resp.body?.getReader();
+    if (!reader) {
+      const arrBuf = await resp.arrayBuffer();
+      const b = Buffer.from(arrBuf);
+      if (b.length > MAX_FILE_SIZE) {
+        throw new Error(`文件过大(${(b.length / 1024 / 1024).toFixed(1)}MB),超过 ${MAX_FILE_SIZE / 1024 / 1024}MB 限制`);
+      }
+      await fs.writeFile(fullPath, b);
+      fileCreated = true;
+    } else {
+      const chunks: Buffer[] = [];
+      let received = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        received += value!.length;
+        if (received > MAX_FILE_SIZE) {
+          await reader.cancel().catch(() => {});
+          throw new Error(`文件过大(已下载 ${(received / 1024 / 1024).toFixed(1)}MB),超过 ${MAX_FILE_SIZE / 1024 / 1024}MB 限制`);
+        }
+        chunks.push(Buffer.from(value!));
+      }
+      const buf = Buffer.concat(chunks);
+      await fs.writeFile(fullPath, buf);
+      fileCreated = true;
     }
-    await fs.writeFile(fullPath, buf);
-    fileCreated = true;
   }
 
   // 3. 给当前用户插一行(唯一约束 [userId, hash] 防并发)

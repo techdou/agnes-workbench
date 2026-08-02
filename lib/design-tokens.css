@@ -1,0 +1,83 @@
+/* ============================================================
+   PHOSPHOR STUDIO — 设计令牌(Design Tokens)
+   把"颜色变量定义"和"组件样式实现"解耦,方便:
+   - 多项目复用(衍生服务如考试系统可直接 @import 此文件)
+   - 后续抽成独立 npm 包(@agnes/design-tokens)
+   - 主题切换逻辑集中管理
+
+   深色:深蓝黑底 + 琥珀橙 + 磷光绿
+   亮色:暖米白底 + 深琥珀 + 墨绿
+   ============================================================ */
+
+/* ---- 暗色主题(默认) ---- */
+:root,
+[data-theme="dark"] {
+  /* === 三层背景(从深到浅) === */
+  --c-void: #0a0e14;        /* 页面最底层底色 */
+  --c-ink: #11161f;         /* 次级背景(卡片底) */
+  --c-panel: #151b26;       /* 面板/弹窗底色 */
+  --c-edge: #1f2937;        /* 卡片边缘高光 */
+  --c-line: #2a3548;        /* 分割线、边框 */
+
+  /* === 四层文字(从亮到暗) === */
+  --c-text: #e6e1cf;        /* 主文字(暖白) */
+  --c-text-dim: #8b95a7;    /* 次要文字 */
+  --c-text-faint: #6b7280;  /* 弱化文字 */
+  --c-text-ghost: #4a5568;  /* 占位/禁用 */
+
+  /* === 强调色(品牌色) === */
+  --c-phosphor: #7dd3a0;        /* 次品牌色 - 磷光绿(成功/数据流入) */
+  --c-phosphor-dim: #4a8c66;    /* 暗态磷光 */
+  --c-amber: #f4a261;           /* 主品牌色 - 琥珀橙(CTA/主操作/数据流出) */
+  --c-amber-bright: #ffb86b;    /* 高亮态琥珀(hover/激活) */
+  --c-rust: #c8553d;            /* 警告/删除/危险(铁锈红) */
+  --c-cream: #e6e1cf;           /* 同主文字,复用名 */
+
+  /* === 装饰性辉光与覆盖层 === */
+  --c-bg-glow-1: rgba(244, 162, 97, 0.06);
+  --c-bg-glow-2: rgba(125, 211, 160, 0.05);
+  --c-grid: #1a2332;
+  --c-overlay: rgba(10, 14, 20, 0.7);
+
+  /* === React Flow 连线/handle 专用 === */
+  --edge-stroke: #f4a261;
+  --edge-glow: rgba(244, 162, 97, 0.4);
+  --handle-source: #f4a261;
+  --handle-target: #7dd3a0;
+}
+
+/* ---- 亮色主题 ---- */
+[data-theme="light"] {
+  /* === 三层背景(暖米白系) === */
+  --c-void: #f5f1e8;
+  --c-ink: #faf6ed;
+  --c-panel: #ffffff;
+  --c-edge: #e8e0d0;
+  --c-line: #d6cdb8;
+
+  /* === 四层文字 === */
+  --c-text: #2a2520;
+  --c-text-dim: #6b6358;
+  --c-text-faint: #8a8275;
+  --c-text-ghost: #a8a092;
+
+  /* === 强调色(深色版本,保证对比度) === */
+  --c-phosphor: #2d7a4f;
+  --c-phosphor-dim: #5a9a73;
+  --c-amber: #b8651a;
+  --c-amber-bright: #d97a1f;
+  --c-rust: #a8442e;
+  --c-cream: #2a2520;
+
+  /* === 装饰性辉光与覆盖层 === */
+  --c-bg-glow-1: rgba(184, 101, 26, 0.08);
+  --c-bg-glow-2: rgba(45, 122, 79, 0.06);
+  --c-grid: #d6cdb8;
+  --c-overlay: rgba(245, 241, 232, 0.7);
+
+  /* === React Flow 连线/handle 专用 === */
+  --edge-stroke: #b8651a;
+  --edge-glow: rgba(184, 101, 26, 0.3);
+  --handle-source: #b8651a;
+  --handle-target: #2d7a4f;
+}

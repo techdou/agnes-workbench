@@ -1,73 +1,11 @@
 @import "tailwindcss";
+@import "../lib/design-tokens.css";
 
 /* ============================================================
-   PHOSPHOR STUDIO — 双主题设计系统
-   深色:深蓝黑底 + 琥珀橙 + 磷光绿
-   亮色:暖米白底 + 深琥珀 + 墨绿
+   PHOSPHOR STUDIO — 全局样式
+   设计令牌(颜色/主题变量)已抽至 lib/design-tokens.css
+   衍生服务(考试系统等)可直接 @import 该文件复用配色
    ============================================================ */
-
-/* ---- 暗色主题(默认) ---- */
-:root,
-[data-theme="dark"] {
-  --c-void: #0a0e14;
-  --c-ink: #11161f;
-  --c-panel: #151b26;
-  --c-edge: #1f2937;
-  --c-line: #2a3548;
-
-  --c-text: #e6e1cf;
-  --c-text-dim: #8b95a7;
-  --c-text-faint: #6b7280;
-  --c-text-ghost: #4a5568;
-
-  --c-phosphor: #7dd3a0;
-  --c-phosphor-dim: #4a8c66;
-  --c-amber: #f4a261;
-  --c-amber-bright: #ffb86b;
-  --c-rust: #c8553d;
-  --c-cream: #e6e1cf;
-
-  --c-bg-glow-1: rgba(244, 162, 97, 0.06);
-  --c-bg-glow-2: rgba(125, 211, 160, 0.05);
-  --c-grid: #1a2332;
-  --c-overlay: rgba(10, 14, 20, 0.7);
-
-  --edge-stroke: #f4a261;
-  --edge-glow: rgba(244, 162, 97, 0.4);
-  --handle-source: #f4a261;
-  --handle-target: #7dd3a0;
-}
-
-/* ---- 亮色主题 ---- */
-[data-theme="light"] {
-  --c-void: #f5f1e8;
-  --c-ink: #faf6ed;
-  --c-panel: #ffffff;
-  --c-edge: #e8e0d0;
-  --c-line: #d6cdb8;
-
-  --c-text: #2a2520;
-  --c-text-dim: #6b6358;
-  --c-text-faint: #8a8275;
-  --c-text-ghost: #a8a092;
-
-  --c-phosphor: #2d7a4f;
-  --c-phosphor-dim: #5a9a73;
-  --c-amber: #b8651a;
-  --c-amber-bright: #d97a1f;
-  --c-rust: #a8442e;
-  --c-cream: #2a2520;
-
-  --c-bg-glow-1: rgba(184, 101, 26, 0.08);
-  --c-bg-glow-2: rgba(45, 122, 79, 0.06);
-  --c-grid: #d6cdb8;
-  --c-overlay: rgba(245, 241, 232, 0.7);
-
-  --edge-stroke: #b8651a;
-  --edge-glow: rgba(184, 101, 26, 0.3);
-  --handle-source: #b8651a;
-  --handle-target: #2d7a4f;
-}
 
 @theme inline {
   --color-void: var(--c-void);
