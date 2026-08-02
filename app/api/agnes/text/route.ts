@@ -1,7 +1,7 @@
 // 文本生成代理(需登录 + 用户已配置 API Key,baseUrl SSRF 校验)
 import { NextRequest, NextResponse } from 'next/server';
 import { generateText, type CallContext } from '@/lib/agnes';
-import { assertSafeUrl } from '@/lib/cache';
+import { assertSafeExternalUrl } from '@/lib/cache';
 import { getUserContext } from '@/lib/user-key';
 
 export async function POST(req: NextRequest) {
@@ -18,7 +18,8 @@ export async function POST(req: NextRequest) {
     const { prompt, system, temperature, maxTokens, textModel, baseUrl, autoTranslate } = body;
     if (!prompt) return NextResponse.json({ error: 'prompt 必填' }, { status: 400 });
 
-    const safeBaseUrl = baseUrl ? (assertSafeUrl(baseUrl), baseUrl) : undefined;
+    if (baseUrl) await assertSafeExternalUrl(baseUrl);
+    const safeBaseUrl = baseUrl;
     const ctx: CallContext = {
       apiKey: ctx0.apiKey,
       textModel,

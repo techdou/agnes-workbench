@@ -18,12 +18,13 @@ const DEFAULT_TEXT_MODEL = 'agnes-2.0-flash';
 const DEFAULT_IMAGE_MODEL = 'agnes-image-2.1-flash';
 const DEFAULT_VIDEO_MODEL = 'agnes-video-v2.0';
 
-// API key 解析:优先用客户端通过 X-Agnes-Key 请求头传来的 key,其次环境变量
-// [C2] 不再用模块级变量(并发请求会串 key),改成函数参数透传
+// API key 解析:多用户版从用户加密存储取(main 分支无此机制)
+// [BugFix] 删除 process.env.AGNES_API_KEY fallback:
+// 多用户场景下服务端 env key 是部署者私钥,不该被请求者的 API 调用消耗。
+// 各路由已前置校验 ctx0.apiKey 为空时 403,这里只是断言非空。
 function resolveApiKey(override?: string | null): string {
-  const key = override || process.env.AGNES_API_KEY;
-  if (!key) throw new Error('AGNES_API_KEY 未配置,请在设置面板填写或检查环境变量');
-  return key;
+  if (!override) throw new Error('API Key 未配置,请在设置中配置');
+  return override;
 }
 
 // ---------- 调用上下文(统一装 API key + 模型覆盖) ----------

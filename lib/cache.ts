@@ -119,6 +119,15 @@ async function assertSafeDns(hostname: string): Promise<void> {
 }
 
 /**
+ * 组合校验:URL 白名单 + DNS rebinding 预解析
+ * 给 agnes 代理路由用(cache 路径在 doCache 里单独调)
+ */
+export async function assertSafeExternalUrl(raw: string): Promise<void> {
+  assertSafeUrl(raw);
+  await assertSafeDns(new URL(raw).hostname);
+}
+
+/**
  * 校验本地路径不越出 library 目录(防路径遍历)
  */
 function assertSafeLocalPath(localPath: string): void {
@@ -324,11 +333,11 @@ async function doCache(
   return { hash, localPath, fullPath, created: fileCreated };
 }
 
-// 根据 hash 取条目(用于 /api/cache/[hash] 路由)
+// 根据 hash 取条目(admin 专用,无 userId 所有权校验)
 // 多用户场景下:同一个 hash 可能属于多个用户,这里返回任意一条用于读文件
-// [H4] 警告:此函数无所有权校验。所有权校验由路由层基于 userId 做
-// (普通用户走 getEntryByUserHash;admin 路径用这个)
-export async function getEntryByHash(hash: string): Promise<ManifestEntry | undefined> {
+// ⚠️ 仅限 admin 路由调用!普通用户必须走 getEntryByUserHash(userId, hash)
+// [H4] 重命名自 getEntryByHash → getEntryByHashAdmin,函数名即警告
+export async function getEntryByHashAdmin(hash: string): Promise<ManifestEntry | undefined> {
   const asset = await prisma.mediaAsset.findFirst({ where: { hash } });
   if (!asset) return undefined;
   return {

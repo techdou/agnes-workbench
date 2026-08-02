@@ -4,9 +4,25 @@
 //   if (session instanceof NextResponse) return session; // 未登录
 //   const userId = session.user.id;
 
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { auth } from '@/auth';
 import type { Session } from 'next-auth';
+
+/**
+ * CSRF 同源校验 —— 检查 Origin 头是否与 Host 匹配
+ * 用于 proxy 层对非 GET 请求的统一拦截,防止跨站请求伪造
+ */
+export function isSameOrigin(req: NextRequest): boolean {
+  const origin = req.headers.get('origin');
+  const host = req.headers.get('host');
+  if (!origin || !host) return false;
+  try {
+    const u = new URL(origin);
+    return u.host === host;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * 获取当前 session(可能为 null)

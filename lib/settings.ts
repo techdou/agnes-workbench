@@ -216,11 +216,9 @@ export const useSettings = create<SettingsState>((set, get) => ({
 
 // ---------- 便捷读取(非组件环境) ----------
 
-// 注意:多用户后 API Key 从服务端 DB 读取,不再前端传
-// API route 内部自行从 session → DB → decrypt 获取
-export function getApiKey(): string {
-  return process.env.AGNES_API_KEY || '';
-}
+// 注意:多用户后 API Key 从用户加密存储(DB)读取,不再走 env
+// 删除了 getApiKey() 死代码:它返回 process.env.AGNES_API_KEY,
+// 多用户场景下这是部署者私钥,不该暴露给请求者
 
 export function getBaseUrl(): string {
   const s = useSettings.getState().settings;

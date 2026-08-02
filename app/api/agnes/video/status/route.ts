@@ -1,7 +1,7 @@
 // 视频状态查询代理(需登录 + 用户已配置 API Key,baseUrl SSRF 校验)
 import { NextRequest, NextResponse } from 'next/server';
 import { getVideoStatus, type CallContext } from '@/lib/agnes';
-import { assertSafeUrl } from '@/lib/cache';
+import { assertSafeExternalUrl } from '@/lib/cache';
 import { getUserContext } from '@/lib/user-key';
 
 export async function GET(req: NextRequest) {
@@ -20,7 +20,8 @@ export async function GET(req: NextRequest) {
     const baseUrl = searchParams.get('baseUrl') || undefined;
     if (!id) return NextResponse.json({ error: 'id 必填' }, { status: 400 });
 
-    const safeBaseUrl = baseUrl ? (assertSafeUrl(baseUrl), baseUrl) : undefined;
+    if (baseUrl) await assertSafeExternalUrl(baseUrl);
+    const safeBaseUrl = baseUrl;
     const ctx: CallContext = {
       apiKey: ctx0.apiKey,
       videoModel,

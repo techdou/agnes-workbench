@@ -1,7 +1,7 @@
 // 模型列表代理 —— 转发 GET /v1/models,返回 Agnes 当前所有可用模型
 // 需登录 + 用户已配置 API Key,baseUrl SSRF 校验
 import { NextRequest, NextResponse } from 'next/server';
-import { assertSafeUrl } from '@/lib/cache';
+import { assertSafeExternalUrl } from '@/lib/cache';
 import { getUserContext } from '@/lib/user-key';
 
 const BASE_URL = process.env.AGNES_BASE_URL || 'https://apihub.agnes-ai.com';
@@ -18,8 +18,8 @@ export async function GET(req: NextRequest) {
 
     const searchParams = new URL(req.url).searchParams;
     const baseUrlRaw = searchParams.get('baseUrl') || BASE_URL;
-    // SSRF:用户可控 baseUrl 必须过白名单
-    assertSafeUrl(baseUrlRaw);
+    // SSRF:用户可控 baseUrl 必须过白名单 + DNS 预解析
+    await assertSafeExternalUrl(baseUrlRaw);
     const baseUrl = baseUrlRaw;
 
     const resp = await fetch(`${baseUrl}/v1/models`, {

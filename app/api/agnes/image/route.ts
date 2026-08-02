@@ -2,7 +2,7 @@
 // 需登录 + 用户已配置 API Key,baseUrl 走 SSRF 白名单校验
 import { NextRequest, NextResponse } from 'next/server';
 import { textToImage, imageToImage, type CallContext } from '@/lib/agnes';
-import { resolveLocalImages, assertSafeUrl } from '@/lib/cache';
+import { resolveLocalImages, assertSafeExternalUrl } from '@/lib/cache';
 import { getUserContext } from '@/lib/user-key';
 
 export async function POST(req: NextRequest) {
@@ -19,8 +19,9 @@ export async function POST(req: NextRequest) {
     const { mode, prompt, size, inputImageUrls, imageModel, baseUrl, autoTranslate } = body;
     if (!prompt) return NextResponse.json({ error: 'prompt 必填' }, { status: 400 });
 
-    // SSRF:用户可控的 baseUrl 必须在 Agnes 域名白名单内
-    const safeBaseUrl = baseUrl ? (assertSafeUrl(baseUrl), baseUrl) : undefined;
+    // SSRF:用户可控的 baseUrl 必须在 Agnes 域名白名单内 + DNS 预解析
+    if (baseUrl) await assertSafeExternalUrl(baseUrl);
+    const safeBaseUrl = baseUrl;
 
     const ctx: CallContext = {
       apiKey: ctx0.apiKey,

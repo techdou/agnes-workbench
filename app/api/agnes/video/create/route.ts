@@ -6,7 +6,7 @@ import {
   createMultiImageVideo,
   type CallContext,
 } from '@/lib/agnes';
-import { resolveLocalImages, assertSafeUrl } from '@/lib/cache';
+import { resolveLocalImages, assertSafeExternalUrl } from '@/lib/cache';
 import { getUserContext } from '@/lib/user-key';
 
 export async function POST(req: NextRequest) {
@@ -28,7 +28,8 @@ export async function POST(req: NextRequest) {
 
     if (!prompt) return NextResponse.json({ error: 'prompt 必填' }, { status: 400 });
 
-    const safeBaseUrl = baseUrl ? (assertSafeUrl(baseUrl), baseUrl) : undefined;
+    if (baseUrl) await assertSafeExternalUrl(baseUrl);
+    const safeBaseUrl = baseUrl;
     const ctx: CallContext = { apiKey: ctx0.apiKey, videoModel, baseUrl: safeBaseUrl, autoTranslate };
     const opts = { width, height, numFrames, frameRate, seed, negativePrompt };
     let result;

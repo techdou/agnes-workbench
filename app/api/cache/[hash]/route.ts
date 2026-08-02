@@ -1,8 +1,8 @@
 // 缓存代理:GET 按 hash 取本地文件,PATCH 切换收藏
 // 需登录,严格校验 (userId, hash) 所有权 —— 用户 A 不能读/改 B 的缓存
 import { NextRequest, NextResponse } from 'next/server';
-import { getEntryByHash, getEntryByUserHash, setFavorited, LIBRARY_DIR, assertSafeLocalPath } from '@/lib/cache';
-import { getSession } from '@/lib/auth-guard';
+import { getEntryByHashAdmin, getEntryByUserHash, setFavorited, LIBRARY_DIR, assertSafeLocalPath } from '@/lib/cache';
+import { getSession, isSameOrigin } from '@/lib/auth-guard';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -40,7 +40,7 @@ export async function GET(
     // 管理员可读任意媒体;普通用户严格按 (userId, hash) 校验
     const isAdmin = session.user.role === 'ADMIN';
     const entry = isAdmin
-      ? await getEntryByHash(hash)
+      ? await getEntryByHashAdmin(hash)
       : await getEntryByUserHash(session.user.id, hash);
     if (!entry) {
       return NextResponse.json({ error: `hash ${hash} 未找到` }, { status: 404 });
@@ -70,18 +70,8 @@ export async function GET(
 // PATCH /api/cache/[hash] —— 切换收藏状态
 // body: { favorited: boolean }
 // 严格按 (userId, hash) 所有权校验:用户只能改自己名下的
-// [H3] 同源校验:多重防护(session 已挡未登录,同源再挡 CSRF)
-function isSameOrigin(req: NextRequest): boolean {
-  const origin = req.headers.get('origin');
-  const host = req.headers.get('host');
-  if (!origin || !host) return false;
-  try {
-    const u = new URL(origin);
-    return u.host === host;
-  } catch {
-    return false;
-  }
-}
+// [H3] 同源校验已在 proxy 层统一拦截,这里保留作为纵深防御
+// (isSameOrigin 从 lib/auth-guard 导入)
 
 export async function PATCH(
   req: NextRequest,
