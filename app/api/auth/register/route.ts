@@ -4,31 +4,16 @@
 // 安全:
 //   - 密码长度 12 位起
 //   - 邮箱重复时不暴露存在性(统一返回 200,前端引导登录)
-//   - 内存级 rate limit(单 IP 5 分钟内最多 5 次注册,生产建议替换为 Redis)
+//   - 分布式 Rate Limit(配置 Upstash Redis 时跨实例共享,否则 fallback 内存)
 
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 const BCRYPT_COST = 12;
 const MIN_PASSWORD_LENGTH = 12;
-const REGISTER_WINDOW_MS = 5 * 60 * 1000;
 const REGISTER_MAX_PER_IP = 5;
-
-// 内存级 rate limit(IP → 时间戳数组)。生产环境应换 Redis/Upstash。
-const registerHits = new Map<string, number[]>();
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const hits = (registerHits.get(ip) || []).filter((t) => now - t < REGISTER_WINDOW_MS);
-  if (hits.length >= REGISTER_MAX_PER_IP) {
-    registerHits.set(ip, hits);
-    return true;
-  }
-  hits.push(now);
-  registerHits.set(ip, hits);
-  return false;
-}
 
 function getClientIp(req: NextRequest): string {
   const xff = req.headers.get('x-forwarded-for');
@@ -39,8 +24,12 @@ function getClientIp(req: NextRequest): string {
 export async function POST(req: NextRequest) {
   try {
     // ---------- Rate limit ----------
+    // [BugFix] 旧代码用进程内 Map,serverless 多实例下每个实例各自计数,限流失效。
+    // 改用 lib/rate-limit:配置了 UPSTASH_REDIS_REST_URL 时用 Redis 分布式限流,
+    // 否则 fallback 到内存 Map(开发环境够用)
     const ip = getClientIp(req);
-    if (isRateLimited(ip)) {
+    const { success } = await checkRateLimit(`register:${ip}`, REGISTER_MAX_PER_IP, '5 m');
+    if (!success) {
       return NextResponse.json(
         { error: '注册过于频繁,请稍后再试' },
         { status: 429, headers: { 'Retry-After': '300' } }
@@ -97,7 +86,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, alreadyRegistered: false });
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    // [BugFix] 不直接回 e.message(可能含 DB 连接串等内部信息)
+    console.error('注册失败:', e);
+    return NextResponse.json({ error: '注册失败,请稍后重试' }, { status: 500 });
   }
 }
