@@ -104,4 +104,47 @@ describe('extractVideoUrl', () => {
     };
     expect(extractVideoUrl(data)).toBe(data.metadata.url);
   });
+
+  // ---------- [BugFix] metadata 搜索完整性 ----------
+  // 图生视频完成态 URL 可能不在 metadata.url,而在 metadata 的其他输出字段。
+  // 之前代码 metadata 段只硬查 metadata.url 单一路径(不像 data[] 段那样递归),
+  // 导致图生视频 status=completed 却提取不到 URL,报"视频完成但未返回 URL"。
+
+  it('从 metadata.video_url 提取 URL(图生视频可能的返回结构)', () => {
+    const data = {
+      status: 'completed',
+      metadata: {
+        video_url: 'https://platform-outputs.agnes-ai.space/videos/i2v-out.mp4',
+      },
+    };
+    expect(extractVideoUrl(data)).toBe(data.metadata.video_url);
+  });
+
+  it('从 metadata.output_url 提取 URL(Agnes 字段名变体)', () => {
+    const data = {
+      status: 'completed',
+      metadata: {
+        output_url: 'https://platform-outputs.agnes-ai.space/videos/out.mp4',
+      },
+    };
+    expect(extractVideoUrl(data)).toBe(data.metadata.output_url);
+  });
+
+  it('从顶层 output_url 提取 URL(常见视频 API 字段名)', () => {
+    const data = {
+      status: 'completed',
+      output_url: 'https://platform-outputs.agnes-ai.space/videos/top.mp4',
+    };
+    expect(extractVideoUrl(data)).toBe(data.output_url);
+  });
+
+  it('顶层 url 优先于 metadata 其他输出字段(避免 metadata 覆盖)', () => {
+    const data = {
+      url: 'https://top.example.com/video.mp4',
+      metadata: {
+        output_url: 'https://meta.example.com/different.mp4',
+      },
+    };
+    expect(extractVideoUrl(data)).toBe(data.url);
+  });
 });

@@ -377,17 +377,24 @@ export interface VideoStatusResult {
 export function extractVideoUrl(data: AgnesJson): string | undefined {
   // [H4] 删掉 remixed_from_video_id:语义是"源视频 ID"不是下载 URL,
   // 服务商哪天把它写成 URL 会把别人的源视频 URL 当下载链接返回
-  // [BugFix] Agnes 在 /v1/videos/{id} 路径完成态把 URL 藏在 metadata.url,
-  // 顶层没有 url 字段——实测验证,必须兜底查 metadata。
-  for (const key of ['video_url', 'url']) {
+
+  // [BugFix] Agnes 不同生成模式(文生视频 / 图生视频 / 多图视频)返回结构不同,
+  // URL 可能藏在顶层或 metadata 的各种字段里。用"显式输出字段名优先"策略,
+  // 只查语义明确为"输出"的字段(video_url / url / output_url / download_url / result_url),
+  // 不做无差别深度搜索 —— 避免误提取图生视频回显的输入图 URL(image / image_url)。
+  const OUTPUT_KEYS = ['video_url', 'url', 'output_url', 'download_url', 'result_url'];
+  for (const key of OUTPUT_KEYS) {
     const v = data?.[key];
     if (typeof v === 'string' && /^https?:\/\//.test(v)) return v;
   }
-  // [BugFix] 兜底:metadata.url(实测 task 路径完成态返回结构)
+  // [BugFix] metadata 段递归:图生视频完成态 URL 可能不在 metadata.url,
+  // 而在 metadata.video_url / metadata.output_url / metadata.result.url 等。
+  // 之前只硬查 metadata.url 单一路径(不像 data[] 段那样递归),
+  // 导致图生视频 status=completed 却报"未返回 URL"。
   const meta = data?.metadata;
   if (meta && typeof meta === 'object') {
-    const v = (meta as AgnesJson)?.url;
-    if (typeof v === 'string' && /^https?:\/\//.test(v)) return v;
+    const u = extractVideoUrl(meta as AgnesJson);
+    if (u) return u;
   }
   if (Array.isArray(data?.data)) {
     for (const item of data.data) {
