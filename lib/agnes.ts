@@ -80,11 +80,20 @@ async function requestJson<T = AgnesJson>(
     if (!resp.ok) {
       // 提取 Agnes 返回的友好错误信息(不是整段 JSON)
       let friendlyMsg = `HTTP ${resp.status}`;
+      let extracted = false;
       try {
         const errJson = JSON.parse(text);
-        if (errJson?.error?.message) friendlyMsg = errJson.error.message;
+        // 尝试多种常见错误结构:OpenAI 风格 / 简单 message / detail
+        const msg = errJson?.error?.message || errJson?.message || errJson?.detail
+          || (typeof errJson?.error === 'string' ? errJson.error : null);
+        if (msg) { friendlyMsg = String(msg); extracted = true; }
       } catch {
-        if (text) friendlyMsg += `: ${text.slice(0, 200)}`;
+        // 非 JSON,走纯文本
+      }
+      // [BugFix] JSON parse 成功但没命中已知错误结构时,之前丢弃了 body,
+      // 用户只看到无意义的 "HTTP 429"。现在保留原始片段用于排障。
+      if (!extracted && text) {
+        friendlyMsg += `: ${text.slice(0, 200)}`;
       }
       // 用自定义 Error 保留状态码,让 route 层能透传(503 不该包成 500)
       const err = new Error(friendlyMsg) as Error & { statusCode?: number };
@@ -162,21 +171,40 @@ export interface ImageResult {
   raw: unknown;
 }
 
-// 从 Agnes 返回结构里提取图片 URL(字段名可能是 url / image_url / data[].url)
-// [L2] 加 http(s) 正则过滤,避免脏字段被当 URL
+// 从 Agnes 返回结构里提取图片 URL
+// [BugFix] 与 extractVideoUrl 对齐:扩充输出字段名 + metadata 递归 + b64_json 兼容
+// 只查输出语义的字段(url/image_url/output_url),不扫描 input_image 等输入字段
+const IMAGE_OUTPUT_KEYS = ['url', 'image_url', 'output_url'] as const;
+const IMAGE_RE = /^https?:\/\//i;
 function extractImageUrls(data: AgnesJson): string[] {
   const urls: string[] = [];
   const pushIfUrl = (v: unknown) => {
-    if (typeof v === 'string' && /^https?:\/\//i.test(v)) urls.push(v);
+    if (typeof v === 'string' && IMAGE_RE.test(v)) urls.push(v);
   };
-  pushIfUrl(data?.url);
-  pushIfUrl(data?.image_url);
+  // b64_json 兼容:Agnes 可能忽略 response_format:'url' 返回 base64
+  if (typeof data?.b64_json === 'string' && data.b64_json.length > 0) {
+    urls.push(`data:image/png;base64,${data.b64_json}`);
+  }
+  for (const key of IMAGE_OUTPUT_KEYS) {
+    pushIfUrl(data?.[key]);
+  }
+  // metadata 递归(与 extractVideoUrl 对等)
+  const meta = data?.metadata;
+  if (meta && typeof meta === 'object') {
+    for (const key of IMAGE_OUTPUT_KEYS) {
+      pushIfUrl((meta as AgnesJson)?.[key]);
+    }
+  }
   if (Array.isArray(data?.data)) {
     for (const item of data.data) {
       if (item && typeof item === 'object') {
-        const obj = item as Record<string, unknown>;
-        pushIfUrl(obj.url);
-        pushIfUrl(obj.image_url);
+        for (const key of IMAGE_OUTPUT_KEYS) {
+          pushIfUrl((item as AgnesJson)?.[key]);
+        }
+        // 兼容 b64_json 在 data[] 里的情况
+        if (typeof (item as AgnesJson)?.b64_json === 'string') {
+          urls.push(`data:image/png;base64,${(item as AgnesJson).b64_json}`);
+        }
       }
     }
   }
@@ -303,6 +331,12 @@ async function createVideoTask(
 
   const data = await requestJson<AgnesJson>('POST', '/v1/videos', payload, ctx?.apiKey, 120000, ctx?.baseUrl);
   const { id, kind } = pickVideoId(data);
+  // [BugFix] 创建响应里必须有任务 id,否则后续状态查询无的放矢。
+  // 之前 pickVideoId 找不到 id 静默返回 { kind: 'task_id' }(无 id),createVideoTask
+  // 照样返回 status='queued' 的空壳,下游 pollVideo 查一个不存在的 id 直到超时。
+  if (!id) {
+    throw new Error(`视频创建响应未包含任务 id,原始响应: ${JSON.stringify(data).slice(0, 500)}`);
+  }
   return {
     videoId: kind === 'video_id' ? id : undefined,
     taskId: kind === 'task_id' ? id : undefined,
@@ -408,21 +442,32 @@ export function extractVideoUrl(data: AgnesJson): string | undefined {
 }
 
 export async function getVideoStatus(identifier: string, ctx?: CallContext): Promise<VideoStatusResult> {
-  let path: string;
-  if (identifier.startsWith('video_')) {
-    const q = new URLSearchParams({ video_id: identifier, model_name: ctx?.videoModel || DEFAULT_VIDEO_MODEL });
-    path = `/agnesapi?${q.toString()}`;
-  } else {
-    path = `/v1/videos/${encodeURIComponent(identifier)}`;
-  }
-  const data = await requestJson<AgnesJson>('GET', path, undefined, ctx?.apiKey, 120000, ctx?.baseUrl);
-  return {
+  // [BugFix] 路径选择不再靠 identifier.startsWith('video_') 猜端点——
+  // 实测 Agnes 返回的 video_id 字段值是 'task_' 开头(见测试 fixture),
+  // 前缀判断会走错端点导致 404 或拿不到状态。
+  // 改成:先走 /v1/videos/{id}(主路径),失败再 fallback /agnesapi。
+  const parseResult = (data: AgnesJson): VideoStatusResult => ({
     status: String(data?.status ?? ''),
     progress: typeof data?.progress === 'number' ? data.progress : undefined,
     url: extractVideoUrl(data),
     error: data?.error ? JSON.stringify(data.error) : undefined,
     raw: data,
-  };
+  });
+
+  const primaryPath = `/v1/videos/${encodeURIComponent(identifier)}`;
+  try {
+    const data = await requestJson<AgnesJson>('GET', primaryPath, undefined, ctx?.apiKey, 120000, ctx?.baseUrl);
+    return parseResult(data);
+  } catch (e) {
+    // 404 说明这个端点不认这个 id,fallback 到 /agnesapi
+    const err = e as Error & { statusCode?: number };
+    if (err?.statusCode !== 404) throw e;
+  }
+
+  // Fallback: /agnesapi?video_id=xxx
+  const q = new URLSearchParams({ video_id: identifier, model_name: ctx?.videoModel || DEFAULT_VIDEO_MODEL });
+  const data = await requestJson<AgnesJson>('GET', `/agnesapi?${q.toString()}`, undefined, ctx?.apiKey, 120000, ctx?.baseUrl);
+  return parseResult(data);
 }
 
 // ---------- 视频轮询工具(给前端用) ----------

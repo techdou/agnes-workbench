@@ -889,6 +889,11 @@ async function executeNode(id: string, opts?: { silent?: boolean }): Promise<voi
     // [H2/M8] silent 时不弹 toast(联动上游失败只在末端节点报一次)
     if (!silent) toast(msg, 'error');
   } finally {
+    // [BugFix] cancelled 早返回(try 块内的 if (cancelled) return)跳过 catch,
+    // 节点会卡在 status:'running'。这里兜底:被取消的节点重置为 idle。
+    if (cancelled) {
+      updateNodeData(id, { status: 'idle', progress: undefined });
+    }
     cleanup();
   }
 }
@@ -970,8 +975,8 @@ async function pollVideo(
   throw new Error(t('toast.videoTimeout'));
 }
 
-// 拓扑排序(给 runAll 用)
-function topologicalSort(nodes: Node[], edges: Edge[]): Node[] {
+// 拓扑排序(给 runAll 用),导出供单元测试
+export function topologicalSort(nodes: Node[], edges: Edge[]): Node[] {
   const indeg = new Map<string, number>();
   for (const n of nodes) indeg.set(n.id, 0);
   for (const e of edges) {
@@ -992,8 +997,16 @@ function topologicalSort(nodes: Node[], edges: Edge[]): Node[] {
       }
     }
   }
-  // 处理孤立节点(没连线的)
-  for (const n of nodes) if (!visited.has(n.id)) result.push(n.id);
+  // 处理孤立节点(没连线的);检测环路(有入度但永不归零的节点 = 环上节点)
+  const unvisited = nodes.filter((n) => !visited.has(n.id));
+  if (unvisited.length > 0) {
+    // 区分:孤立节点(无连线)正常加入;有连线但卡住 = 存在环
+    const hasEdges = unvisited.some((n) => edges.some((e) => e.source === n.id || e.target === n.id));
+    if (hasEdges) {
+      throw new Error('工作流存在环,无法执行(请检查节点连线是否形成循环)');
+    }
+    for (const n of unvisited) result.push(n.id);
+  }
   const map = new Map(nodes.map((n) => [n.id, n]));
   return result.map((id) => map.get(id)!).filter(Boolean);
 }
