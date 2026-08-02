@@ -237,8 +237,7 @@ agnes-workbench/
 ├── lib/
 │   ├── store.ts                      # Zustand 状态 + 执行引擎 + runAll 限流
 │   ├── agnes.ts                      # Agnes API 客户端(动态模型 + 中文翻译)
-│   ├── cache.ts                      # 缓存管理(SSRF + DNS rebinding 防护 + 收藏)
-│   ├── cache-logic.ts                # 缓存纯逻辑(过滤/排序,无 IO 依赖,便于单测)
+│   ├── cache.ts                      # 缓存管理(SSRF + DNS rebinding 防护 + 收藏 + filterAndSortEntries 纯函数)
 │   ├── prompt-templates.ts           # 结构化扩写模板
 │   ├── prompt-resolve.ts             # @引用解析 + 目标检测
 │   ├── settings.ts                   # 全局设置
@@ -248,7 +247,7 @@ agnes-workbench/
 │   ├── workflow.ts                   # 拓扑排序 + 上游输出收集
 │   ├── workflow-io.ts                # 导入导出
 │   ├── templates.ts                  # 工作流模板
-│   └── __tests__/                    # 单元测试(34 个)
+│   └── __tests__/                    # 单元测试(50 个)
 └── public/                           # 静态资源(截图)
 ```
 

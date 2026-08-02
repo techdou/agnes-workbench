@@ -106,7 +106,6 @@ yarn-error.log*
 
 # ---------- 部署 ----------
 .vercel
-.idea/
 
 
 # ---------- 其他临时文件 ----------
@@ -116,3 +115,4 @@ yarn-error.log*
 *.swo
 .cache/
 .turbo/
+.eslintcache
