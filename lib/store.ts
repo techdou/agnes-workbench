@@ -213,10 +213,10 @@ async function callVideoStatus(id: string): Promise<{ status: string; progress?:
   return resp.json();
 }
 
-async function cacheUrl(url: string, type: 'image' | 'video', prompt?: string): Promise<string> {
+// [BugFix] projectId 改成参数传入(executeNode 开始时快照),
+// 避免 cacheUrl 在 await 期间用户切换项目导致跨项目污染。
+async function cacheUrl(url: string, type: 'image' | 'video', prompt?: string, projectId?: string): Promise<string> {
   try {
-    // 读取当前项目 ID,让画廊按项目隔离
-    const projectId = useFlowStore.getState().currentProjectId || undefined;
     const resp = await fetch('/api/cache/item', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -378,7 +378,10 @@ const runningPromises = new Map<string, Promise<void>>();
 // Agnes 视频 RPM ≈ 1/分钟,多视频节点自动间隔(留 5s buffer),可被 cancelRunAll 中止
 // 注:store.ts 在 client bundle,env 只能 build 时注入,这里用硬编码便于审查
 const VIDEO_MIN_INTERVAL_MS = 65000;
-let runAllAborted = false;
+// [BugFix] 旧代码用全局布尔 runAllAborted,第二次 runAll 进来重置为 false,
+// 第一次 runAll 从 sleep 醒来读到 false 继续跑——两轮 runAll 同时执行。
+// 改成 token:每轮 runAll 拿唯一 token,循环检查 token 是否仍是自己的。
+let runAllToken = 0;
 
 export const useFlowStore = create<FlowState>()(
   temporal(
@@ -451,9 +454,9 @@ export const useFlowStore = create<FlowState>()(
   // [C1] 运行节点:自动先跑完所有上游(拓扑序),再跑自己
   // [M3] 把执行体注册成 Promise 到 runningPromises,供下游 waitForPromise 直接 await
   // [H2] opts.silent=true 时,上游/自身失败都不弹 toast(避免联动场景多弹)
-  runNode: (id, opts) => {
-    // 取消该节点已有的运行
-    cancelRun(id);
+  runNode: async (id, opts) => {
+    // [BugFix] 等旧运行彻底退出后再启动新的,防止旧运行的 await 返回后覆盖新状态
+    await cancelRun(id);
 
     const silent = !!opts?.silent;
     const p = (async () => {
@@ -500,12 +503,13 @@ export const useFlowStore = create<FlowState>()(
       toast(t('toast.videoRateLimit', { interval: Math.round(VIDEO_MIN_INTERVAL_MS / 1000) }), 'info');
     }
 
-    // 重置取消标志,开启本轮 runAll
-    runAllAborted = false;
+    // [BugFix] token 机制:每轮 runAll 拿唯一 token,
+    // 新一轮 runAll 或 cancelRunAll 会递增 token,旧循环检测到不匹配自动退出
+    const myToken = ++runAllToken;
     let lastVideoStartedAt = 0;
 
     for (const n of sorted) {
-      if (runAllAborted) break;
+      if (myToken !== runAllToken) break;
       const d = n.data as { status?: string };
       if (d.status === 'done') continue;
 
@@ -517,17 +521,17 @@ export const useFlowStore = create<FlowState>()(
           // 分片 sleep(每 200ms 检查一次取消),刷新页面自然中止
           const deadline = Date.now() + wait;
           while (Date.now() < deadline) {
-            if (runAllAborted) break;
+            if (myToken !== runAllToken) break;
             await new Promise((r) => setTimeout(r, Math.min(200, deadline - Date.now())));
           }
         }
       }
 
-      if (runAllAborted) break;
+      if (myToken !== runAllToken) break;
       if (VIDEO_NODE_TYPES.has(n.type || '')) lastVideoStartedAt = Date.now();
       await get().runNode(n.id);
     }
-    if (!runAllAborted) toast(t('toast.allComplete'), 'success');
+    if (myToken === runAllToken) toast(t('toast.allComplete'), 'success');
   },
 
   deleteNode: (id) => {
@@ -700,9 +704,9 @@ export const useFlowStore = create<FlowState>()(
     cancelRun(id);
   },
 
-  // [C1] 取消 runAll:设置标志,循环每次迭代 + sleep 分片都会检查
+  // [C1] 取消 runAll:递增 token 让循环退出 + 取消所有正在跑的节点
   cancelRunAll: () => {
-    runAllAborted = true;
+    runAllToken++;
     // 同时取消所有正在跑的节点
     for (const id of [...runningControllers.keys()]) cancelRun(id);
   },
@@ -744,6 +748,10 @@ async function executeNode(id: string, opts?: { silent?: boolean }): Promise<voi
   const nodeType = target.type;
   const settings = useSettings.getState().settings;
   const silent = !!opts?.silent;
+
+  // [BugFix] 快照项目 ID:cacheUrl 用这个值而不是运行时读 getState(),
+  // 防止 await 期间用户切换项目导致缓存写入错误的项目(跨项目污染)
+  const projectIdSnapshot = useFlowStore.getState().currentProjectId || undefined;
 
   // [C3] 注册取消控制器
   let cancelled = false;
@@ -810,7 +818,7 @@ async function executeNode(id: string, opts?: { silent?: boolean }): Promise<voi
       if (cancelled) return;
       const url = result.urls[0];
       if (!url) throw new Error(t('error.noImageUrl'));
-      const cached = await cacheUrl(url, 'image', prompt);
+      const cached = await cacheUrl(url, 'image', prompt, projectIdSnapshot);
       if (cancelled) return;
       updateNodeData(id, { resultUrl: url, cachedUrl: cached, status: 'done' });
       return;
@@ -870,7 +878,7 @@ async function executeNode(id: string, opts?: { silent?: boolean }): Promise<voi
       const result = await pollVideo(videoId, id, () => cancelled);
       if (cancelled) return;
       if (!result.url) throw new Error(t('error.videoNoUrl'));
-      const cached = await cacheUrl(result.url, 'video', prompt);
+      const cached = await cacheUrl(result.url, 'video', prompt, projectIdSnapshot);
       if (cancelled) return;
       updateNodeData(id, { resultUrl: result.url, cachedUrl: cached, status: 'done', progress: 100 });
       return;
@@ -882,13 +890,13 @@ async function executeNode(id: string, opts?: { silent?: boolean }): Promise<voi
       if (nodeType === 'imagePreview') {
         const url = upstream.images[0];
         if (!url) throw new Error(t('error.previewNoImage'));
-        const cached = await cacheUrl(url, 'image');
+        const cached = await cacheUrl(url, 'image', undefined, projectIdSnapshot);
         if (cancelled) return;
         updateNodeData(id, { imageUrl: url, cachedUrl: cached, status: 'done' });
       } else {
         const url = upstream.videos[0] || upstream.images[0];
         if (!url) throw new Error(t('error.videoPreviewNoInput'));
-        const cached = await cacheUrl(url, 'video');
+        const cached = await cacheUrl(url, 'video', undefined, projectIdSnapshot);
         if (cancelled) return;
         updateNodeData(id, { videoUrl: url, cachedUrl: cached, status: 'done' });
       }
@@ -937,12 +945,18 @@ function pickThumbnail(nodes: Node[]): string | undefined {
 }
 
 // 取消某节点的运行
-function cancelRun(id: string) {
+// [BugFix] cancelRun 现在返回旧运行的 Promise,让调用方可以等它彻底退出。
+// 旧代码只设 cancelled 标志不等旧 promise 结束,新运行立即启动,
+// 旧运行从 await 返回后可能写入旧结果覆盖新运行的状态。
+function cancelRun(id: string): Promise<void> {
   const c = runningControllers.get(id);
   if (c) {
     c();
     runningControllers.delete(id);
   }
+  // 等旧 promise 退出(可能还卡在网络 await 中,设了 cancelled 后会 early return)
+  const p = runningPromises.get(id);
+  return p ? p.catch(() => {}) : Promise.resolve();
 }
 
 // [C3+M10] 视频轮询:指数退避(2→4→8→封顶30秒)+ 取消检查
