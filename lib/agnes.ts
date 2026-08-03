@@ -446,13 +446,22 @@ export async function getVideoStatus(identifier: string, ctx?: CallContext): Pro
   // 实测 Agnes 返回的 video_id 字段值是 'task_' 开头(见测试 fixture),
   // 前缀判断会走错端点导致 404 或拿不到状态。
   // 改成:先走 /v1/videos/{id}(主路径),失败再 fallback /agnesapi。
-  const parseResult = (data: AgnesJson): VideoStatusResult => ({
-    status: String(data?.status ?? ''),
-    progress: typeof data?.progress === 'number' ? data.progress : undefined,
-    url: extractVideoUrl(data),
-    error: data?.error ? JSON.stringify(data.error) : undefined,
-    raw: data,
-  });
+  const parseResult = (data: AgnesJson): VideoStatusResult => {
+    const status = String(data?.status ?? '');
+    const url = extractVideoUrl(data);
+    // [诊断] 视频完成但提取不到 URL 时,把完整响应打到控制台
+    // 用于定位 Agnes 返回结构里 URL 到底藏在哪个字段
+    if (status === 'completed' && !url) {
+      console.warn('[诊断] 视频完成但未提取到 URL,完整响应:', JSON.stringify(data, null, 2));
+    }
+    return {
+      status,
+      progress: typeof data?.progress === 'number' ? data.progress : undefined,
+      url,
+      error: data?.error ? JSON.stringify(data.error) : undefined,
+      raw: data,
+    };
+  };
 
   const primaryPath = `/v1/videos/${encodeURIComponent(identifier)}`;
   try {
