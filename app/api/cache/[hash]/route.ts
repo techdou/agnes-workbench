@@ -16,9 +16,9 @@ const MIME: Record<string, string> = {
   '.mov': 'video/quicktime',
 };
 
-// GET /api/cache/[hash] —— 返回缓存的文件
+// GET /api/cache/[hash] —— 返回缓存的文件;?meta=1 返回 metadata(含 favorited)
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ hash: string }> }
 ) {
   try {
@@ -30,6 +30,11 @@ export async function GET(
     const entry = await getEntryByHash(hash);
     if (!entry) {
       return NextResponse.json({ error: `hash ${hash} 未找到` }, { status: 404 });
+    }
+
+    // ?meta=1:只返回 metadata(给 FavoriteButton 查初始收藏状态用)
+    if (req.nextUrl.searchParams.get('meta') === '1') {
+      return NextResponse.json({ favorited: !!entry.favorited });
     }
 
     // [S3] 路径遍历防护:校验 localPath 没越出 library 目录

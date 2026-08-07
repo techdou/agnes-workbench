@@ -27,7 +27,7 @@ import {
 } from './db';
 import { useSettings } from './settings';
 import { buildEnhanceSystemPrompt } from './prompt-templates';
-import { resolveTargetType, resolveImageRefs } from './prompt-resolve';
+import { resolveTargetType, resolveMentions, collectAutoTexts } from './prompt-resolve';
 
 // ---------- API 调用封装 ----------
 
@@ -783,22 +783,27 @@ async function executeNode(id: string, opts?: { silent?: boolean }): Promise<voi
     if (nodeType === 'textToImage' || nodeType === 'imageToImage') {
       const upstream = collectUpstreamOutputs(nodes, edges, id);
       const d = target.data as { prompt?: string; size?: string };
-      let prompt = d.prompt || '';
-      if (!prompt && upstream.texts.length > 0) prompt = upstream.texts.join(' ');
-      if (!prompt) throw new Error(t('error.missingPrompt'));
+      // 自动拼接:未被 @ 引用的上游文本 + 用户手输 prompt(而非二选一丢弃)
+      const rawPrompt = d.prompt || '';
+      const autoText = collectAutoTexts(rawPrompt, nodes, edges, id);
 
       const mode = nodeType === 'imageToImage' ? 'image-to-image' : 'text-to-image';
 
-      // @引用解析:如果有 {@节点id} 标记,按引用顺序取特定上游图片;否则用全部上游图片
+      // @引用解析:先只解析 rawPrompt(用户手输部分),避免 autoText 里的字面 {@xxx} 被误解析
       let inputImages: string[] | undefined;
+      let resolvedRaw = rawPrompt;
       if (nodeType === 'imageToImage') {
-        const { resolvedPrompt, referencedImages } = resolveImageRefs(prompt, nodes, edges, id);
-        prompt = resolvedPrompt;
+        const { resolvedPrompt, referencedImages } = resolveMentions(rawPrompt, nodes, edges, id);
+        resolvedRaw = resolvedPrompt;
         inputImages = referencedImages.length > 0 ? referencedImages : upstream.images;
         if (inputImages.length === 0) {
           throw new Error(t('error.imageToImageNoInput'));
         }
       }
+
+      // autoText 在 resolveMentions 之后拼接,确保不被 mention 正则扫描
+      let prompt = [autoText, resolvedRaw].filter(Boolean).join(' ');
+      if (!prompt) throw new Error(t('error.missingPrompt'));
 
       const size = d.size || settings.defaultImageSize;
       const result = await callImage(mode, prompt, size, inputImages);
@@ -818,9 +823,9 @@ async function executeNode(id: string, opts?: { silent?: boolean }): Promise<voi
         prompt?: string; numFrames?: number; frameRate?: number;
         width?: number; height?: number;
       };
-      let prompt = d.prompt || '';
-      if (!prompt && upstream.texts.length > 0) prompt = upstream.texts.join(' ');
-      if (!prompt) throw new Error(t('error.missingPrompt'));
+      // 自动拼接:未被 @ 引用的上游文本 + 用户手输 prompt(而非二选一丢弃)
+      const rawPrompt = d.prompt || '';
+      const autoText = collectAutoTexts(rawPrompt, nodes, edges, id);
 
       const common = {
         numFrames: d.numFrames ?? settings.defaultVideoFrames,
@@ -829,22 +834,33 @@ async function executeNode(id: string, opts?: { silent?: boolean }): Promise<voi
         height: d.height ?? settings.defaultVideoHeight,
       };
 
+      // 先只解析 rawPrompt(用户手输部分),避免 autoText 里的字面 {@xxx} 被误解析
+      let resolvedRaw = rawPrompt;
+      let referencedImages: string[] = [];
+      if (nodeType === 'textToVideo') {
+        resolvedRaw = resolveMentions(rawPrompt, nodes, edges, id).resolvedPrompt;
+      } else if (nodeType === 'imageToVideo') {
+        const r = resolveMentions(rawPrompt, nodes, edges, id);
+        resolvedRaw = r.resolvedPrompt;
+        referencedImages = r.referencedImages;
+      } else {
+        const r = resolveMentions(rawPrompt, nodes, edges, id);
+        resolvedRaw = r.resolvedPrompt;
+        referencedImages = r.referencedImages;
+      }
+
+      // autoText 在 resolveMentions 之后拼接,确保不被 mention 正则扫描
+      let prompt = [autoText, resolvedRaw].filter(Boolean).join(' ').trim();
+      if (!prompt) throw new Error(t('error.missingPrompt'));
+
       let createBody: Record<string, unknown>;
       if (nodeType === 'textToVideo') {
-        // [M3] 清理可能残留的 {@xxx} 标记(UI 不允许 @图片,但用户可能手敲)
-        prompt = prompt.replace(/\{@[\w_]+\}/g, '').trim();
         createBody = { mode: 'text', prompt, ...common };
       } else if (nodeType === 'imageToVideo') {
-        // @引用:如果有 {@节点id},用引用的图;否则取第一张上游图
-        const { resolvedPrompt, referencedImages } = resolveImageRefs(prompt, nodes, edges, id);
-        prompt = resolvedPrompt;
         const img = referencedImages[0] || upstream.images[0];
         if (!img) throw new Error(t('error.imageToVideoNoInput'));
         createBody = { mode: 'image', prompt, imageUrl: img, ...common };
       } else {
-        // multiImageVideo / keyframe:@引用解析
-        const { resolvedPrompt, referencedImages } = resolveImageRefs(prompt, nodes, edges, id);
-        prompt = resolvedPrompt;
         const imgs = referencedImages.length > 0 ? referencedImages : upstream.images;
         if (imgs.length === 0) throw new Error(t('error.multiImageNoInput'));
         createBody = {
@@ -908,7 +924,7 @@ async function executeNode(id: string, opts?: { silent?: boolean }): Promise<voi
 
 // ---------- 辅助函数 ----------
 
-// resolveTargetType 和 resolveImageRefs 已提取到 lib/prompt-resolve.ts(便于单测)
+// resolveTargetType / resolveMentions / collectAutoTexts 已提取到 lib/prompt-resolve.ts(便于单测)
 
 // 从画布节点里挑一个缩略图 URL(图片优先,视频次之,用于 Dashboard 卡片)
 function pickThumbnail(nodes: Node[]): string | undefined {

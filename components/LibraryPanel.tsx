@@ -14,10 +14,15 @@ interface Entry {
   favorited?: boolean;
 }
 
-export function LibraryPanel() {
+interface LibraryPanelProps {
+  open: boolean;
+  onClose: () => void;
+  onCountChange?: (count: number) => void; // 资源数量变化时通知父组件(给 Toolbar 徽标用)
+}
+
+export function LibraryPanel({ open, onClose, onCountChange }: LibraryPanelProps) {
   const t = useTranslation();
   const [entries, setEntries] = useState<Entry[]>([]);
-  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,7 +36,9 @@ export function LibraryPanel() {
       const resp = await fetch(`/api/library${q}`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
-      setEntries(data.entries || []);
+      const newEntries = data.entries || [];
+      setEntries(newEntries);
+      onCountChange?.(newEntries.length);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('archive.loadFailed'));
     } finally {
@@ -56,6 +63,18 @@ export function LibraryPanel() {
     }
   }
 
+  // 挂载时静默拉一次 count(即使面板未打开,Toolbar 徽标也需要)
+  useEffect(() => {
+    const projectId = useFlowStore.getState().currentProjectId;
+    if (!projectId || !onCountChange) return;
+    const q = `?projectId=${encodeURIComponent(projectId)}`;
+    fetch(`/api/library${q}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) onCountChange((data.entries || []).length); })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (open) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -69,29 +88,12 @@ export function LibraryPanel() {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(!open)}
-        className="fixed right-0 top-[52px] z-20 flex items-center gap-1.5 rounded-l-md border border-r-0 border-l-[3px] px-3 py-2 font-mono text-[10px] font-semibold tracking-[0.15em] shadow-lg backdrop-blur-md transition-all hover:pl-4"
-        style={{
-          borderColor: 'var(--c-edge)',
-          borderLeftColor: 'var(--c-amber)',
-          background: 'color-mix(in srgb, var(--c-ink) 95%, transparent)',
-          color: 'var(--c-amber)',
-        }}
-      >
-        <span className="flicker">◈</span>
-        <span className="hidden sm:inline">{t('toolbar.archive').toUpperCase()}</span>
-        <span className="rounded px-1.5 py-0.5" style={{ background: 'var(--c-void)', color: 'var(--c-text-dim)' }}>
-          {entries.length}
-        </span>
-      </button>
-
       {open && (
         <>
           {/* 移动端遮罩:点击关闭 */}
           <div
             className="fixed inset-0 z-[19] bg-black/40 sm:hidden"
-            onClick={() => setOpen(false)}
+            onClick={onClose}
           />
           <aside
             className="fixed bottom-0 right-0 top-[84px] z-20 flex w-full flex-col border-l backdrop-blur-md sm:w-80"
@@ -106,14 +108,24 @@ export function LibraryPanel() {
                 {imgCount} IMG · {vidCount} VID
               </p>
             </div>
-            <button
-              onClick={refresh}
-              disabled={loading}
-              className="rounded border px-2 py-1 font-mono text-[9px] tracking-wider transition-colors disabled:opacity-50"
-              style={{ borderColor: 'var(--c-line)', color: 'var(--c-text-dim)' }}
-            >
-              {loading ? '↻…' : '↻'}
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={refresh}
+                disabled={loading}
+                className="rounded border px-2 py-1 font-mono text-[9px] tracking-wider transition-colors disabled:opacity-50"
+                style={{ borderColor: 'var(--c-line)', color: 'var(--c-text-dim)' }}
+              >
+                {loading ? '↻…' : '↻'}
+              </button>
+              <button
+                onClick={onClose}
+                className="rounded border px-2 py-1 font-mono text-[12px] leading-none transition-colors"
+                style={{ borderColor: 'var(--c-line)', color: 'var(--c-text-dim)' }}
+                aria-label={t('toolbar.back')}
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-3">

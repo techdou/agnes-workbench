@@ -213,7 +213,11 @@ export function NodeTextarea({
   return (
     <textarea
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => {
+        // IME 组字期跳过,避免半成品拼音灌回 store 打断输入法
+        if ((e.nativeEvent as InputEvent).isComposing) return;
+        onChange(e.target.value);
+      }}
       placeholder={placeholder}
       rows={rows}
       className="w-full resize-none rounded border px-2.5 py-1.5 font-[family-name:var(--font-display)] text-[13px] leading-relaxed transition-colors focus:outline-none"
@@ -228,7 +232,10 @@ export function NodeInput({ value, onChange, placeholder }: { value: string; onC
   return (
     <input
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => {
+        if ((e.nativeEvent as InputEvent).isComposing) return;
+        onChange(e.target.value);
+      }}
       placeholder={placeholder}
       className={inputBaseClass}
       style={{ borderColor: 'var(--c-line)', background: 'var(--c-void)', color: 'var(--c-text)' }}

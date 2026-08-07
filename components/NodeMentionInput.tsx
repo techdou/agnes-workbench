@@ -22,20 +22,27 @@ export function NodeMentionInput({ nodeId, value, onChange, placeholder, rows = 
   const nodes = useFlowStore((s) => s.nodes);
   const edges = useFlowStore((s) => s.edges);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const composingRef = useRef(false); // IME 组字期标记:组字时不灌回 store,避免打断输入法
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionStart, setMentionStart] = useState(-1);
   const [activeIdx, setActiveIdx] = useState(0);
 
-  // 查上游节点(已连线到当前节点的 source 节点),且有图片输出的
+  // 查上游节点(已连线到当前节点的 source 节点):text 节点始终纳入;图片节点受 allowImageRef 控制
   const upstreamNodes = useMemo(() => {
     const upstreamIds = edges.filter((e) => e.target === nodeId).map((e) => e.source);
     return nodes.filter((n) => {
       if (!upstreamIds.includes(n.id)) return false;
+      // 文本节点:有 text 字段即纳入(@ 引用文本内容),无论 allowImageRef
+      if (n.type === 'text') {
+        const td = n.data as { text?: string };
+        return !!td.text;
+      }
+      // 图片节点:仅在 allowImageRef 时纳入
+      if (!allowImageRef) return false;
       const d = n.data as { resultUrl?: string; imageUrl?: string; cachedUrl?: string };
-      // 只显示有图片输出的节点
       return !!(d.resultUrl || d.imageUrl || d.cachedUrl);
     });
-  }, [nodes, edges, nodeId]);
+  }, [nodes, edges, nodeId, allowImageRef]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (!mentionOpen) return;
@@ -73,15 +80,9 @@ export function NodeMentionInput({ nodeId, value, onChange, placeholder, rows = 
     });
   }
 
-  function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    const newValue = e.target.value;
-    onChange(newValue);
-    // 如果不允许 @图片引用(textToVideo),跳过 mention 逻辑
-    if (!allowImageRef) return;
-    const textarea = e.target;
-    const cursor = textarea.selectionStart;
-    // 检测 @ 触发:光标前最近的 @,且 @ 后没有空格或换行
-    const beforeCursor = newValue.slice(0, cursor);
+  // @ 检测:光标前最近的 @,且 @ 后没有空格或换行
+  function detectMention(text: string, cursor: number) {
+    const beforeCursor = text.slice(0, cursor);
     const lastAt = beforeCursor.lastIndexOf('@');
     if (lastAt !== -1) {
       const textAfterAt = beforeCursor.slice(lastAt + 1);
@@ -94,6 +95,22 @@ export function NodeMentionInput({ nodeId, value, onChange, placeholder, rows = 
       }
     }
     setMentionOpen(false);
+  }
+
+  function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    // IME 组字期跳过:不灌回 store,不检测 @,避免打断输入法组字会话
+    if (composingRef.current) return;
+    const newValue = e.target.value;
+    onChange(newValue);
+    detectMention(newValue, e.target.selectionStart);
+  }
+
+  // IME 组字开始/结束:标记组字期,结束时 flush 最终值 + 重跑 @ 检测
+  function handleCompositionEnd(e: React.CompositionEvent<HTMLTextAreaElement>) {
+    composingRef.current = false;
+    const ta = e.target as HTMLTextAreaElement;
+    onChange(ta.value); // flush 组字完成的最终文本
+    detectMention(ta.value, ta.selectionStart); // 组字结束后补检 @
   }
 
   // 过滤上游节点(基于 @ 后输入的文字,不读 ref 避免并发渲染问题)
@@ -113,7 +130,7 @@ export function NodeMentionInput({ nodeId, value, onChange, placeholder, rows = 
 
   return (
     <div className="relative">
-      {allowImageRef && upstreamNodes.length > 0 && (
+      {upstreamNodes.length > 0 && (
         <p className="mb-1 font-mono text-[8px] tracking-wider" style={{ color: 'var(--c-text-ghost)' }}>
           {t('node.mentionHint')}
         </p>
@@ -122,6 +139,8 @@ export function NodeMentionInput({ nodeId, value, onChange, placeholder, rows = 
         ref={textareaRef}
         value={value}
         onChange={handleChange}
+        onCompositionStart={() => { composingRef.current = true; }}
+        onCompositionEnd={handleCompositionEnd}
         onKeyDown={handleKeyDown}
         onBlur={() => setTimeout(() => setMentionOpen(false), 150)}
         placeholder={placeholder}
@@ -137,7 +156,8 @@ export function NodeMentionInput({ nodeId, value, onChange, placeholder, rows = 
           style={{ borderColor: 'var(--c-line)', background: 'var(--c-panel)' }}
         >
           {filteredUpstream.map((n, idx) => {
-            const d = n.data as { resultUrl?: string; imageUrl?: string; cachedUrl?: string };
+            const isText = n.type === 'text';
+            const d = n.data as { resultUrl?: string; imageUrl?: string; cachedUrl?: string; text?: string };
             const thumb = d.resultUrl || d.imageUrl || d.cachedUrl;
             const sigil = NODE_SIGIL[n.type || ''] || '◇';
             return (
@@ -150,10 +170,21 @@ export function NodeMentionInput({ nodeId, value, onChange, placeholder, rows = 
                   background: idx === activeIdx ? 'color-mix(in srgb, var(--c-phosphor) 12%, transparent)' : 'transparent',
                 }}
               >
-                {/* 缩略图 */}
-                {thumb && (
+                {/* 文本节点:引号图标 + 文本预览;图片节点:缩略图 */}
+                {isText ? (
+                  <>
+                    <span className="shrink-0 font-mono text-[14px] leading-none" style={{ color: 'var(--c-phosphor)' }}>❝</span>
+                    <span
+                      className="max-w-[80px] shrink-0 truncate font-[family-name:var(--font-display)] text-[10px]"
+                      style={{ color: 'var(--c-text-dim)' }}
+                      title={d.text}
+                    >
+                      {d.text}
+                    </span>
+                  </>
+                ) : thumb ? (
                   <img src={thumb} alt="" className="h-6 w-6 shrink-0 rounded object-cover" />
-                )}
+                ) : null}
                 <span className="font-mono text-[12px]" style={{ color: 'var(--c-amber)' }}>{sigil}</span>
                 <span className="font-mono text-[11px]" style={{ color: 'var(--c-text-dim)' }}>
                   {t(`node.${n.type}`)}

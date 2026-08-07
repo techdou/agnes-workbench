@@ -148,29 +148,24 @@ export function Dashboard() {
             <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleFileChange} />
             <button
               onClick={() => router.push('/gallery')}
-              className="rounded border px-3 py-1.5 font-mono text-[10px] tracking-wider transition-colors"
+              className="flex items-center justify-center rounded border px-3 py-1.5 font-mono text-[10px] font-semibold tracking-wider transition-colors touch-target-44"
               style={{
                 borderColor: 'color-mix(in srgb, var(--c-amber) 40%, transparent)',
                 color: 'var(--c-amber)',
               }}
               title={t('gallery.title')}
+              aria-label={t('gallery.title')}
             >
-              ★ {t('gallery.title')}
+              ★ <span className="ml-1 hidden sm:inline">{t('gallery.title')}</span>
             </button>
             <button
               onClick={handleImportClick}
-              className="hidden rounded border px-3 py-1.5 font-mono text-[10px] tracking-wider transition-colors touch-target-44 sm:flex sm:items-center sm:justify-center"
+              className="flex items-center justify-center rounded border px-3 py-1.5 font-mono text-[10px] font-semibold tracking-wider transition-colors touch-target-44"
               style={{ borderColor: 'var(--c-line)', color: 'var(--c-text-dim)' }}
-            >
-              ↑ {t('dashboard.importWorkflow')}
-            </button>
-            <button
-              onClick={handleImportClick}
-              className="flex items-center justify-center rounded border px-2.5 py-1.5 font-mono text-[11px] transition-colors touch-target-44 sm:hidden"
-              style={{ borderColor: 'var(--c-line)', color: 'var(--c-text-dim)' }}
+              title={t('dashboard.importWorkflow')}
               aria-label={t('dashboard.importWorkflow')}
             >
-              ↑
+              ↑ <span className="ml-1 hidden sm:inline">{t('dashboard.importWorkflow')}</span>
             </button>
             <button
               onClick={handleNewProject}
@@ -180,12 +175,14 @@ export function Dashboard() {
                 background: 'color-mix(in srgb, var(--c-amber) 12%, transparent)',
                 color: 'var(--c-amber)',
               }}
+              title={t('dashboard.newProject')}
+              aria-label={t('dashboard.newProject')}
             >
-              + {t('dashboard.newProject')}
+              + <span className="ml-1 hidden sm:inline">{t('dashboard.newProject')}</span>
             </button>
             <button
               onClick={() => setSettingsOpen(true)}
-              className="flex items-center justify-center rounded border px-2.5 py-1.5 font-mono text-[12px] transition-colors touch-target-44"
+              className="flex items-center justify-center rounded border px-3 py-1.5 font-mono text-[12px] font-semibold transition-colors touch-target-44"
               style={{ borderColor: 'var(--c-line)', color: 'var(--c-text-dim)' }}
               title={t('dashboard.settings')}
               aria-label={t('dashboard.settings')}

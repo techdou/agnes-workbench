@@ -4,6 +4,7 @@ import { useFlowStore } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
 import { useSettings } from '@/lib/settings';
 import { NodeShell, NodeTextarea, NodeLabel, ResultThumb, selectClass, selectStyle } from './NodeShell';
+import { FavoriteButton } from './FavoriteButton';
 import type { TextToImageData } from '@/lib/types';
 
 const SIZES = ['1024x768', '1024x1024', '768x1024', '1280x768', '720x1280'];
@@ -55,20 +56,23 @@ export function TextToImageNode({ id, data }: { id: string; data: TextToImageDat
       {data.cachedUrl && (
         <>
           <ResultThumb url={data.cachedUrl} />
-          <a
-            href={data.cachedUrl}
-            download={`agnes-image-${id}.png`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-1.5 rounded border px-3 py-1.5 font-mono text-[10px] tracking-[0.15em] transition-all"
-            style={{
-              borderColor: 'color-mix(in srgb, var(--c-phosphor) 40%, transparent)',
-              background: 'var(--c-void)',
-              color: 'var(--c-phosphor)',
-            }}
-          >
-            ↓ {t('node.download')}
-          </a>
+          <div className="flex items-center gap-2">
+            <a
+              href={data.cachedUrl}
+              download={`agnes-image-${id}.png`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded border px-3 py-1.5 font-mono text-[10px] tracking-[0.15em] transition-all"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--c-phosphor) 40%, transparent)',
+                background: 'var(--c-void)',
+                color: 'var(--c-phosphor)',
+              }}
+            >
+              ↓ {t('node.download')}
+            </a>
+            <FavoriteButton cachedUrl={data.cachedUrl} />
+          </div>
         </>
       )}
     </NodeShell>

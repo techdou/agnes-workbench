@@ -4,6 +4,7 @@
 import { useFlowStore } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
 import { NodeShell } from './NodeShell';
+import { FavoriteButton } from './FavoriteButton';
 import type { ImagePreviewData, VideoPreviewData } from '@/lib/types';
 
 type TFunc = (key: string, params?: Record<string, string | number>) => string;
@@ -15,7 +16,7 @@ function DownloadButton({ url, filename, t }: { url: string; filename: string; t
       download={filename}
       target="_blank"
       rel="noopener noreferrer"
-      className="mt-2 flex items-center justify-center gap-1.5 rounded border px-3 py-1.5 font-mono text-[10px] tracking-[0.15em] transition-all"
+      className="flex items-center justify-center gap-1.5 rounded border px-3 py-1.5 font-mono text-[10px] tracking-[0.15em] transition-all"
       style={{
         borderColor: 'color-mix(in srgb, var(--c-phosphor) 40%, transparent)',
         background: 'var(--c-void)',
@@ -67,7 +68,12 @@ export function ImagePreviewNode({ id, data }: { id: string; data: ImagePreviewD
           >
             <img src={data.cachedUrl} alt="preview" className="max-h-64 w-full object-contain" />
           </div>
-          <DownloadButton url={data.cachedUrl} filename={`agnes-${id}.png`} t={t} />
+          <div className="mt-2 flex items-center gap-2">
+            <div className="flex-1">
+              <DownloadButton url={data.cachedUrl} filename={`agnes-${id}.png`} t={t} />
+            </div>
+            <FavoriteButton cachedUrl={data.cachedUrl} />
+          </div>
         </div>
       ) : (
         <EmptyState t={t} />
@@ -103,7 +109,12 @@ export function VideoPreviewNode({ id, data }: { id: string; data: VideoPreviewD
           >
             <video src={data.cachedUrl} controls autoPlay loop className="max-h-64 w-full" />
           </div>
-          <DownloadButton url={data.cachedUrl} filename={`agnes-${id}.mp4`} t={t} />
+          <div className="mt-2 flex items-center gap-2">
+            <div className="flex-1">
+              <DownloadButton url={data.cachedUrl} filename={`agnes-${id}.mp4`} t={t} />
+            </div>
+            <FavoriteButton cachedUrl={data.cachedUrl} />
+          </div>
         </div>
       ) : (
         <EmptyState t={t} />

@@ -5,6 +5,7 @@
 import { useFlowStore } from '@/lib/store';
 import { useTranslation } from '@/lib/i18n';
 import { NodeShell, NodeLabel } from './NodeShell';
+import { FavoriteButton } from './FavoriteButton';
 import { NodeMentionInput } from '@/components/NodeMentionInput';
 import { VideoParams, VideoProgress } from './VideoParams';
 import type { VideoNodeData } from '@/lib/types';
@@ -69,15 +70,20 @@ export function VideoNodeBase({ id, data, config }: VideoNodeBaseProps) {
       />
       <VideoProgress progress={data.progress} status={data.status} />
       {data.cachedUrl && (
-        <video
-          src={data.cachedUrl}
-          controls
-          className="mt-1 max-h-40 w-full rounded border"
-          style={{
-            borderColor: 'color-mix(in srgb, var(--c-amber) 30%, transparent)',
-            boxShadow: '0 0 12px var(--c-bg-glow-1)',
-          }}
-        />
+        <>
+          <video
+            src={data.cachedUrl}
+            controls
+            className="mt-1 max-h-40 w-full rounded border"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--c-amber) 30%, transparent)',
+              boxShadow: '0 0 12px var(--c-bg-glow-1)',
+            }}
+          />
+          <div className="flex justify-end">
+            <FavoriteButton cachedUrl={data.cachedUrl} />
+          </div>
+        </>
       )}
     </NodeShell>
   );

@@ -12,12 +12,14 @@ import { exportWorkflow } from '@/lib/workflow-io';
 interface ToolbarProps {
   onOpenPalette: () => void;
   onOpenSettings: () => void;
+  onOpenLibrary: () => void;
+  libraryCount?: number;
   isTouchDevice?: boolean;
   multiSelectMode?: boolean;
   onToggleMultiSelect?: () => void;
 }
 
-export function Toolbar({ onOpenPalette, onOpenSettings, isTouchDevice, multiSelectMode, onToggleMultiSelect }: ToolbarProps) {
+export function Toolbar({ onOpenPalette, onOpenSettings, onOpenLibrary, libraryCount, isTouchDevice, multiSelectMode, onToggleMultiSelect }: ToolbarProps) {
   const t = useTranslation();
   const router = useRouter();
   const pushToast = useToast((s) => s.push);
@@ -168,12 +170,33 @@ export function Toolbar({ onOpenPalette, onOpenSettings, isTouchDevice, multiSel
           <button
             onClick={handleExport}
             disabled={nodeCount === 0}
-            className="touch-target-44 flex items-center justify-center rounded border px-2.5 py-1 font-mono text-[10px] tracking-wider transition-colors disabled:opacity-30"
+            className="touch-target-44 flex items-center justify-center rounded border px-2.5 py-1 font-mono text-[10px] font-semibold tracking-wider transition-colors disabled:opacity-30"
             style={{ borderColor: 'var(--c-line)', color: 'var(--c-text-dim)' }}
             title={t('toolbar.export')}
             aria-label={t('toolbar.export')}
           >
             ↓
+          </button>
+
+          <button
+            onClick={onOpenLibrary}
+            className="touch-target-44 flex items-center justify-center rounded border px-2.5 py-1 font-mono text-[11px] font-semibold tracking-wider transition-colors"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--c-amber) 40%, transparent)',
+              color: 'var(--c-amber)',
+            }}
+            title={t('toolbar.archive')}
+            aria-label={t('toolbar.archive')}
+          >
+            ◈<span className="ml-1 hidden sm:inline">{t('toolbar.archive')}</span>
+            {libraryCount !== undefined && libraryCount > 0 && (
+              <span
+                className="ml-1 rounded px-1 py-0.5 font-mono text-[9px] leading-none"
+                style={{ background: 'var(--c-void)', color: 'var(--c-text-dim)' }}
+              >
+                {libraryCount}
+              </span>
+            )}
           </button>
 
           <button

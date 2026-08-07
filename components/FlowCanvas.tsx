@@ -126,6 +126,8 @@ function FlowCanvasInner() {
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryCount, setLibraryCount] = useState(0);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   // 移动端多选模式:开启后点击节点 toggle 选中(替代桌面 Shift+Click)
@@ -360,6 +362,8 @@ function FlowCanvasInner() {
       <Toolbar
         onOpenPalette={() => setPaletteOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenLibrary={() => setLibraryOpen(true)}
+        libraryCount={libraryCount}
         isTouchDevice={isTouchDevice}
         multiSelectMode={multiSelectMode}
         onToggleMultiSelect={() => setMultiSelectMode((v) => !v)}
@@ -430,7 +434,7 @@ function FlowCanvasInner() {
           />
         </ReactFlow>
 
-        <LibraryPanel />
+        <LibraryPanel open={libraryOpen} onClose={() => setLibraryOpen(false)} onCountChange={setLibraryCount} />
         <ToastContainer />
 
         {/* 移动端底部工具条:撤销/重做(替代 Ctrl+Z/Ctrl+Shift+Z) */}
