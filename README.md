@@ -6,7 +6,7 @@
 [![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
 [![React Flow](https://img.shields.io/badge/@xyflow/react-12-blue)](https://reactflow.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6)](https://www.typescriptlang.org/)
-[![Vitest](https://img.shields.io/badge/Tests-50%20passed-brightgreen)](lib/__tests__/)
+[![Vitest](https://img.shields.io/badge/Tests-70%20passed-brightgreen)](lib/__tests__/)
 [![CI](https://github.com/techdou/agnes-workbench/actions/workflows/ci.yml/badge.svg)](https://github.com/techdou/agnes-workbench/actions/workflows/ci.yml)
 
 通过拖拽节点、连线编排,一句话驱动 Agnes 的文本、图片、视频全模态生成能力。支持项目管理、工作流导入导出、多图参考融合、结构化 prompt 扩写(英文/中文输出可选)、★ 全局画廊收藏、移动端触屏适配、撤销/重做、中英双语。
@@ -64,12 +64,14 @@
 
 实现上只切换模板里的"输出语言"指令(单次 LLM 调用),结构化视觉描述方法论不变;扩写后的 prompt 直接写进 `text` 字段,传给下游节点。
 
-### @节点引用(多图精确指定)
+### Prompt 组装:自动拼接 + @节点引用
 
-图生图/图生视频的 prompt 框输入 `@` → 弹出已连线的上游节点列表(带缩略图)→ 选中插入 `{@节点id}`。运行时:
-- 系统解析 `{@xxx}`,按引用顺序提取图片 URL
-- 安全限制:只能引用通过连线连到当前节点的上游节点
-- prompt 里的 `{@xxx}` 替换成自然语言("the first reference image"),图片走 API 的 image 数组
+**自动拼接** — 连到当前节点的上游文本节点,其内容会自动拼进 prompt(按节点 x 坐标从左到右排序),与 prompt 框里手输的内容合并生效,无需手动复制粘贴。
+
+**@引用** — prompt 框输入 `@` → 弹出已连线的上游节点列表(图片节点带缩略图,文本节点带 ❝ 预览)→ 选中插入 `{@节点id}`。运行时:
+- **图片节点** — 按引用顺序提取图片 URL,走 API 的 image 数组,prompt 里的 `{@xxx}` 替换成自然语言("the first reference image")
+- **文本节点** — `{@xxx}` 替换成该节点的文本内容
+- **安全限制** — 只能引用通过连线连到当前节点的上游节点;自动拼接段里的字面 `{@xxx}` 不会被误解析
 
 ### 画布交互
 
@@ -86,8 +88,8 @@
 
 ### 收藏与画廊
 
-- **项目级归档** — 右侧 `◈ ARCHIVE` 抽屉,按项目隔离,自动收集本画布所有生成结果
-- **★ 收藏** — 归档卡片右上角 ☆/★ 切换,乐观更新 + 失败回滚
+- **项目级画廊** — 画布页 header `◈ 画廊` 按钮(带作品数量徽标)打开侧滑面板,按项目隔离,自动收集本画布所有生成结果
+- **★ 节点结果区直接收藏** — 生成结果旁的 ☆/★ 按钮一键收藏,乐观更新 + 失败回滚;画廊面板里的卡片同样可切换
 - **全局画廊** — 首页顶栏 `★ Gallery` 入口,`/gallery` 独立路由跨项目聚合所有 ★ 内容,masonry 瀑布流,视频可点播放
 
 ### 移动端适配
@@ -145,7 +147,7 @@ npm run dev
 2. **画布** → 按 `/` 搜索添加节点,或从节点右侧 ● 拖到空白处弹出推荐
 3. **连线** — 拖拽节点右侧 ● 到下一个节点左侧 ●
 4. **运行** — 点节点底部 EXECUTE,自动先跑完上游
-5. **归档** — 右侧 ARCHIVE 查看本项目作品;点 ☆ 收藏 → 首页 ★ Gallery 看全部收藏
+5. **画廊** — 画布 header 点 `◈ 画廊` 查看本项目作品;结果旁点 ☆ 收藏 → 首页 ★ Gallery 看全部收藏
 
 ### 文本节点扩写 + 输出语言
 
@@ -189,7 +191,7 @@ npm run dev
 | i18n | 自建轻量方案 | 中英双语,零依赖 |
 | 字体 | Fraunces + JetBrains Mono | 衬线 + 等宽,本地化 |
 | API | Agnes AI | OpenAI 兼容协议 |
-| 测试 | Vitest | 50 个单测(6 个测试文件) |
+| 测试 | Vitest | 70 个单测(7 个测试文件) |
 
 **零 Python 依赖,全 TypeScript。**
 
@@ -215,7 +217,7 @@ agnes-workbench/
 │       │   └── item/route.ts         #   POST 缓存新 URL
 │       ├── gallery/route.ts          # 全局画廊(★ 收藏列表)
 │       ├── upload/                   # 图片上传
-│       └── library/                  # 项目级归档列表
+│       └── library/                  # 项目级画廊列表
 ├── components/
 │   ├── Dashboard.tsx                 # 项目列表
 │   ├── ProjectCard.tsx               # 项目卡片
@@ -227,19 +229,20 @@ agnes-workbench/
 │   ├── ContextMenu.tsx               # 右键/长按菜单
 │   ├── ShortcutsModal.tsx            # 快捷键/手势速查
 │   ├── SettingsModal.tsx             # 设置(API/模型/参数/外观/语言)
-│   ├── LibraryPanel.tsx              # 项目级归档抽屉 + ★ 收藏
+│   ├── LibraryPanel.tsx              # 项目画廊侧滑面板(header 入口 + ★ 收藏)
 │   ├── GalleryPage.tsx               # 全局画廊页面(masonry)
 │   ├── MediaCard.tsx                 # 媒体卡片共用组件(GalleryVideo)
 │   └── nodes/                        # 节点组件
 │       ├── NodeShell.tsx             #   节点外壳(双主题)
 │       ├── VideoNodeBase.tsx         #   视频节点基类
+│       ├── FavoriteButton.tsx        #   结果区 ☆/★ 收藏按钮
 │       └── ...
 ├── lib/
 │   ├── store.ts                      # Zustand 状态 + 执行引擎 + runAll 限流
 │   ├── agnes.ts                      # Agnes API 客户端(动态模型 + 中文翻译)
 │   ├── cache.ts                      # 缓存管理(SSRF + DNS rebinding 防护 + 收藏 + filterAndSortEntries 纯函数)
 │   ├── prompt-templates.ts           # 结构化扩写模板
-│   ├── prompt-resolve.ts             # @引用解析 + 目标检测
+│   ├── prompt-resolve.ts             # @引用解析(图片+文本) + prompt 自动拼接 + 目标检测
 │   ├── settings.ts                   # 全局设置
 │   ├── db.ts                         # IndexedDB 存储
 │   ├── i18n.ts + dictionaries/       # 国际化(zh/en)
@@ -247,7 +250,7 @@ agnes-workbench/
 │   ├── workflow.ts                   # 拓扑排序 + 上游输出收集
 │   ├── workflow-io.ts                # 导入导出
 │   ├── templates.ts                  # 工作流模板
-│   └── __tests__/                    # 单元测试(50 个)
+│   └── __tests__/                    # 单元测试(70 个)
 └── public/                           # 静态资源(截图)
 ```
 
@@ -322,14 +325,15 @@ multi-user 分支需要额外的环境变量(`DATABASE_URL` / `AUTH_SECRET` / `E
 ## 🧪 测试
 
 ```bash
-npm test          # 跑全部 50 个单测
+npm test          # 跑全部 70 个单测
 npm run lint      # ESLint(0 error)
 npx tsc --noEmit  # 类型检查(0 error)
 ```
 
 测试覆盖:
 - `workflow.test.ts` — 拓扑排序、上游输出收集、环检测
-- `prompt-resolve.test.ts` — @引用解析、目标类型检测
+- `topological-sort.test.ts` — 执行顺序拓扑排序(依赖优先级、稳定性)
+- `prompt-resolve.test.ts` — @引用解析(图片/文本)、自动拼接、目标类型检测
 - `store.test.ts` — 节点推荐列表
 - `cache.test.ts` — 过滤排序纯函数(projectId/收藏/组合/老数据 fallback)
 - `agnes.test.ts` — Agnes API 客户端(URL 提取、状态判定、错误兜底)
